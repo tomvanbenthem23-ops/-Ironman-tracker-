@@ -49,4 +49,5 @@ productie.
 
 ## Deployen
 
-Zie [`DEPLOY.md`](./DEPLOY.md).
+De app draait op **https://ironman-tracker-khaki.vercel.app**. Zie [`DEPLOY.md`](./DEPLOY.md)
+voor de opzet en wat er nog te doen is.
