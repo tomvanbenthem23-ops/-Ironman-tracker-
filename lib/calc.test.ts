@@ -15,6 +15,7 @@ import {
   recentSpeed,
   targetClass,
   targetFor,
+  summaryText,
   trend,
   weekNr
 } from './calc';
@@ -365,5 +366,39 @@ describe('mondayOf', () => {
     expect(iso(mondayOf('2026-09-06'))).toBe('2026-08-31'); // zondag
     expect(iso(mondayOf('2026-08-31'))).toBe('2026-08-31'); // maandag zelf
     expect(iso(mondayOf('2026-09-02'))).toBe('2026-08-31'); // woensdag
+  });
+});
+
+/* ================= samenvatting ================= */
+
+describe('summaryText', () => {
+  it('schrijft enkelvoud bij één training', () => {
+    freeze('2026-10-20');
+    const s = st({
+      type: 'lange_run',
+      date: '2026-10-01',
+      stats: { done: true, tijdMin: 55, afstand: 10 }
+    });
+    const txt = summaryText(s, P, 'Tom', estimateFinish(s, P), consistency(s, P), 0.9);
+    expect(txt).toContain('<b>1 training</b>');
+    expect(txt).not.toContain('1 trainingen');
+  });
+
+  it('schrijft meervoud bij meerdere trainingen', () => {
+    freeze('2026-10-20');
+    const s = st(
+      { type: 'lange_run', date: '2026-10-01', stats: { done: true, tijdMin: 55, afstand: 10 } },
+      { type: 'lange_run', date: '2026-10-02', stats: { done: true, tijdMin: 55, afstand: 10 } }
+    );
+    const txt = summaryText(s, P, 'Tom', estimateFinish(s, P), consistency(s, P), 1.8);
+    expect(txt).toContain('<b>2 trainingen</b>');
+  });
+
+  it('zegt het netjes als er nog niets is', () => {
+    freeze('2026-10-20');
+    const s = emptyState();
+    expect(summaryText(s, P, 'Tom', estimateFinish(s, P), null, 0)).toBe(
+      'Nog geen afgeronde trainingen. Zodra je trainingen afvinkt met tijd en afstand begint hier de analyse: vorm per discipline, trends, en een steeds nauwkeurigere eindtijdvoorspelling.'
+    );
   });
 });

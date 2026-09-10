@@ -467,7 +467,9 @@ export function summaryText(
     return 'Nog geen afgeronde trainingen. Zodra je trainingen afvinkt met tijd en afstand begint hier de analyse: vorm per discipline, trends, en een steeds nauwkeurigere eindtijdvoorspelling.';
   }
 
-  const bits: string[] = [`${naam} heeft <b>${n} trainingen</b> afgerond.`];
+  const bits: string[] = [
+    `${naam} heeft <b>${n} ${n === 1 ? 'training' : 'trainingen'}</b> afgerond.`
+  ];
 
   if (consPct != null) {
     bits.push(
