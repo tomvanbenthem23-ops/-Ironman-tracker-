@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, workouts, weekly, garmin } from '@/lib/db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 export const dynamic = 'force-dynamic';
+export const preferredRegion = 'fra1'; // Frankfurt: naast de Neon-database
 
 type StateShape = {
   version: 2;

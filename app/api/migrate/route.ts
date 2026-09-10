@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { migrate } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
+export const preferredRegion = 'fra1'; // Frankfurt: naast de Neon-database
 
 /**
  * Eenmalig aanroepen na de eerste deploy: maakt de tabellen aan.

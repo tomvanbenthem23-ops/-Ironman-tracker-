@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const preferredRegion = 'fra1'; // Frankfurt: naast de Neon-database
+
 const COOKIE_NAME = 'im_auth';
 
 export async function POST(req: NextRequest) {
