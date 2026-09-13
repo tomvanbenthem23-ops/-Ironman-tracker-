@@ -48,7 +48,7 @@ export function Dashboard() {
   const allDone = doneWorkouts(state, person).length;
 
   return (
-    <section className="grid grid-cols-1 gap-3.5 px-4 pb-10 pt-4 sm:px-6 lg:grid-cols-[repeat(auto-fit,minmax(300px,1fr))]">
+    <section className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-3.5 px-6 pb-10 pt-4">
       <Hero est={est} naam={naam} allDone={allDone} />
 
       {DISCIPLINES.map((d) => (
@@ -110,9 +110,9 @@ function Hero({
       .map(([, l]) => l as string);
 
     return (
-      <article className="rounded-im-card bg-im-hero p-4 text-white shadow-im-card sm:p-5 lg:col-span-full">
+      <article className="col-span-full rounded-im-card bg-im-hero p-5 text-white shadow-im-card">
         <CardTitle onNavy>Geschatte eindtijd — {naam}</CardTitle>
-        <div className="text-[1.8rem] font-extrabold tabular-nums sm:text-[2.4rem]">
+        <div className="text-[2.4rem] font-extrabold tabular-nums">
           –:––{' '}
           <small className="text-[1rem] font-normal text-im-navy-soft">
             nog niet te berekenen
@@ -133,7 +133,7 @@ function Hero({
   const gap = biggestGap(est);
 
   return (
-    <article className="rounded-im-card bg-im-hero p-4 text-white shadow-im-card sm:p-5 lg:col-span-full">
+    <article className="col-span-full rounded-im-card bg-im-hero p-5 text-white shadow-im-card">
       <CardTitle onNavy>
         <span className="flex flex-wrap justify-between gap-2">
           <span>Geschatte eindtijd — {naam}</span>
@@ -141,9 +141,9 @@ function Hero({
         </span>
       </CardTitle>
 
-      <div className="text-[1.8rem] font-extrabold tabular-nums sm:text-[2.4rem]">
+      <div className="text-[2.4rem] font-extrabold tabular-nums">
         {fmtHM(total)}{' '}
-        <small className="text-[.9rem] font-normal text-im-navy-soft sm:text-[1rem]">
+        <small className="text-[1rem] font-normal text-im-navy-soft">
           ± {margin} min · op basis van {allDone} afgeronde trainingen
         </small>
       </div>
@@ -368,8 +368,8 @@ function Card({
 }) {
   return (
     <article
-      className={`rounded-im-card bg-im-card p-4 shadow-im-card sm:px-5 ${
-        full ? 'lg:col-span-full' : ''
+      className={`rounded-im-card bg-im-card px-5 py-4 shadow-im-card ${
+        full ? 'col-span-full' : ''
       }`}
     >
       <CardTitle>{title}</CardTitle>

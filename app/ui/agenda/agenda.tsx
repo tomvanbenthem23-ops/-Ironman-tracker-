@@ -74,8 +74,8 @@ export function Agenda({
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       <Banner year={year} month={month} />
 
-      <main className="flex flex-col items-start gap-4 px-4 pb-10 pt-4 sm:px-6 md:flex-row">
-        <aside className="w-full shrink-0 md:sticky md:top-3 md:w-[215px]">
+      <main className="flex items-start gap-4 px-6 pb-10 pt-4">
+        <aside className="sticky top-3 w-[215px] shrink-0">
           <Palette phase={phase} selected={selectedType} onSelect={setSelectedType} />
         </aside>
 
@@ -156,7 +156,7 @@ function Banner({ year, month }: { year: number; month: number }) {
 
   if (!body) return null;
   return (
-    <div className={`mx-4 mt-3.5 rounded-im-day border px-4 py-2.5 text-[.9rem] sm:mx-6 ${cls}`}>
+    <div className={`mx-6 mt-3.5 rounded-im-day border px-4 py-2.5 text-[.9rem] ${cls}`}>
       {body}
     </div>
   );

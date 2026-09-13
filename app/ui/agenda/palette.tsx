@@ -24,8 +24,7 @@ export function Palette({
         {phase === 2 ? 'Trainingen — fase 2' : 'Trainingen — opbouw'}
       </h2>
 
-      {/* telefoon: chiprij die horizontaal scrolt. desktop: kolom */}
-      <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 md:mx-0 md:block md:overflow-visible md:px-0 md:pb-0">
+      <div>
         {keys.map((key) => (
           <PaletteItem
             key={key}
@@ -36,14 +35,10 @@ export function Palette({
         ))}
       </div>
 
-      <p className="mt-2 hidden text-[.74rem] leading-relaxed text-im-muted md:block">
+      <p className="mt-2 text-[.74rem] leading-relaxed text-im-muted">
         Sleep een training naar een dag, of klik hem aan en tik daarna op een dag.
         Klik op een geplande training om je tijden in te vullen. Slepen tussen
         dagen kan ook.
-      </p>
-      <p className="mt-2 text-[.74rem] leading-relaxed text-im-muted md:hidden">
-        Tik een training aan en tik daarna op een dag. Tik op een geplande
-        training om je tijden in te vullen.
       </p>
 
       <details className="mt-3.5 rounded-im-day bg-im-card p-3 text-[.78rem] leading-relaxed text-im-muted">
@@ -98,7 +93,7 @@ function PaletteItem({
       onClick={onSelect}
       aria-pressed={selected}
       style={{ background: t.color, borderLeftColor: t.border }}
-      className={`min-h-[38px] shrink-0 touch-manipulation rounded-im-day border-2 border-l-[5px] px-2.5 py-2 text-left text-[.88rem] font-semibold text-im-ink shadow-im-day md:mb-1.5 md:w-full md:shrink ${
+      className={`min-h-[38px] w-full rounded-im-day border-2 border-l-[5px] px-2.5 py-2 text-left text-[.88rem] font-semibold text-im-ink shadow-im-day mb-1.5 ${
         selected ? 'border-im-ink ring-2 ring-im-ink/15' : 'border-transparent'
       } ${isDragging ? 'opacity-40' : ''}`}
     >

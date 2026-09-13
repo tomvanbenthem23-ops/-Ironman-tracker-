@@ -6,7 +6,6 @@ import { useStore } from '@/lib/store';
 import { Header, type View } from './header';
 import { Agenda } from './agenda/agenda';
 import { Dashboard } from './dashboard/dashboard';
-import { ImportBox } from './import-box';
 
 /** Opent op de huidige maand als die binnen het schema valt. */
 function initialMonth() {
@@ -25,7 +24,7 @@ export function Shell() {
       <Header view={view} setView={setView} />
 
       {!ready ? (
-        <p className="px-4 py-8 text-[.9rem] italic text-im-muted sm:px-6">
+        <p className="px-6 py-8 text-[.9rem] italic text-im-muted">
           Trainingen ophalen…
         </p>
       ) : view === 'agenda' ? (
@@ -34,7 +33,6 @@ export function Shell() {
         <Dashboard />
       )}
 
-      <ImportBox />
     </>
   );
 }

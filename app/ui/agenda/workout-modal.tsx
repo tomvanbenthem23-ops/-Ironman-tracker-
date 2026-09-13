@@ -16,8 +16,7 @@ import { useStore } from '@/lib/store';
 import type { Stats } from '@/lib/types';
 
 /**
- * Invulscherm van één training. Op een telefoon is dit een vel over het hele
- * scherm, op een desktop een dialoogvenster.
+ * Invulscherm van één training.
  */
 export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void }) {
   const { state, saveWorkout, deleteWorkout, setEditing } = useStore();
@@ -116,14 +115,14 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(10,20,30,.55)] p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(10,20,30,.55)] p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`${t.label} invullen`}
-        className="max-h-[95vh] w-full max-w-[420px] overflow-auto rounded-t-im-card bg-white p-5 sm:rounded-im-card"
+        className="max-h-[92vh] w-full max-w-[420px] overflow-auto rounded-im-card bg-white p-5"
       >
         <h3 className="text-[1.05rem] font-bold">
           {t.label}{' '}
@@ -184,7 +183,7 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
 
         {!isKracht && (
           <>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2.5">
               <Field label={afstLabel}>
                 <input
                   value={afstand}

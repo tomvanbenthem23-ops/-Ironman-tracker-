@@ -13,8 +13,8 @@ import { emptyState, type GarminRec, type Person, type State, type Stats, type W
 import { uid, weekKeyOf } from './calc';
 
 /**
- * Gedeelde data-laag. Alles gaat naar de server (sectie 2): wat Tom op zijn
- * telefoon invult, ziet Quirijn op zijn laptop. Schrijven gaat optimistisch —
+ * Gedeelde data-laag. Alles gaat naar de server (sectie 2): wat Tom invult,
+ * ziet Quirijn op zijn eigen laptop. Schrijven gaat optimistisch —
  * je eigen wijziging staat meteen op het scherm — en mislukt een schrijfactie,
  * dan blijft hij zichtbaar én in de wachtrij staan in plaats van stil te
  * verdwijnen.
@@ -38,7 +38,6 @@ type Ctx = {
   deleteWorkout: (id: string) => void;
   bumpWeekly: (field: 'rek' | 'zuipen' | 'geneukt', weekKey: string, delta: number) => void;
   saveGarmin: (weekKey: string, rec: GarminRec) => void;
-  importJson: (raw: unknown) => Promise<{ ok: boolean; message: string }>;
   retry: () => void;
   refresh: () => void;
 };
@@ -234,38 +233,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [person, push]
   );
 
-  const importJson = useCallback(
-    async (raw: unknown) => {
-      const incoming = raw as any;
-      if (!incoming || typeof incoming !== 'object' || !incoming.workouts) {
-        return { ok: false, message: 'Dat lijkt geen geldig databestand.' };
-      }
-      setSaveState('saving');
-      try {
-        const res = await fetch('/api/state', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ import: incoming })
-        });
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error || String(res.status));
-        await load(true);
-        setSaveState('saved');
-        return {
-          ok: true,
-          message: `Ingelezen: ${body.workouts} trainingen, ${body.weekly} weken, ${body.garmin} Garmin-records.`
-        };
-      } catch (e) {
-        setSaveState('error');
-        return {
-          ok: false,
-          message: 'Import mislukt: ' + (e instanceof Error ? e.message : String(e))
-        };
-      }
-    },
-    [load]
-  );
-
   const value = useMemo<Ctx>(
     () => ({
       state,
@@ -282,13 +249,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       deleteWorkout,
       bumpWeekly,
       saveGarmin,
-      importJson,
       retry: () => void flush(),
       refresh: () => void load()
     }),
     [
       state, ready, saveState, pending, person, setPerson,
-      addWorkout, saveWorkout, deleteWorkout, bumpWeekly, saveGarmin, importJson, flush, load
+      addWorkout, saveWorkout, deleteWorkout, bumpWeekly, saveGarmin, flush, load
     ]
   );
 
@@ -301,20 +267,12 @@ export function useStore() {
   return ctx;
 }
 
-/** v1 sloeg de weektellers op als booleans; v2 zijn het tellers. */
+/** Vult ontbrekende sleutels aan zodat de rest van de app niets hoeft te checken. */
 function normalize(raw: any): State {
   const s: State = { ...emptyState(), ...(raw || {}) };
   s.workouts = s.workouts || {};
   s.weekly = s.weekly || {};
   s.garmin = s.garmin || {};
-  for (const p of Object.keys(s.weekly)) {
-    for (const wk of Object.keys(s.weekly[p])) {
-      const r: any = s.weekly[p][wk];
-      for (const f of ['rek', 'zuipen', 'geneukt'] as const) {
-        r[f] = r[f] === true ? 1 : Number(r[f]) || 0;
-      }
-    }
-  }
   for (const id of Object.keys(s.workouts)) {
     s.workouts[id].stats = s.workouts[id].stats || {};
   }

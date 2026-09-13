@@ -54,10 +54,10 @@ function Box({ b, label, wide }: { b: string; label: string; wide?: boolean }) {
   return (
     <div
       className={`rounded-im-day border border-white/20 bg-white/10 px-2.5 py-1.5 text-center ${
-        wide ? 'min-w-[120px]' : 'min-w-[48px] sm:min-w-[62px]'
+        wide ? 'min-w-[120px]' : 'min-w-[62px]'
       }`}
     >
-      <b className="block text-[1rem] font-bold tabular-nums sm:text-[1.3rem]">{b}</b>
+      <b className="block text-[1.3rem] font-bold tabular-nums">{b}</b>
       <span className="text-[.62rem] uppercase tracking-[1px] text-im-navy-soft">
         {label}
       </span>

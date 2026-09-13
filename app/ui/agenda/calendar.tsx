@@ -1,7 +1,7 @@
 'use client';
 
 import { useDroppable } from '@dnd-kit/core';
-import { DAY_NAMES, MONTH_NAMES, RACE_DATE } from '@/lib/config';
+import { DAY_NAMES, RACE_DATE } from '@/lib/config';
 import { addDays, iso, mondayOf, todayIso, weekNr } from '@/lib/calc';
 import type { Workout } from '@/lib/types';
 import { WorkoutCard } from './workout-card';
@@ -30,20 +30,17 @@ function weeksOfMonth(year: number, month: number) {
 
 export function Calendar(props: Props) {
   return (
-    <>
+    <div className="overflow-x-auto">
       <MonthGrid {...props} />
-      <WeekList {...props} />
-    </>
+    </div>
   );
 }
-
-/* ================= desktop: maandrooster ================= */
 
 function MonthGrid({ year, month, byDate, selectedType, onPlace, onOpen }: Props) {
   const weeks = weeksOfMonth(year, month);
 
   return (
-    <table className="hidden w-full border-separate border-spacing-[5px] md:table">
+    <table className="w-full min-w-[880px] border-separate border-spacing-[5px]">
       <thead>
         <tr>
           {DAY_NAMES.map((d) => (
@@ -132,73 +129,5 @@ function DayCell({
         <WorkoutCard key={w.id} w={w} onOpen={() => onOpen(w.id)} />
       ))}
     </td>
-  );
-}
-
-/* ================= telefoon: lijst per week ================= */
-
-function WeekList({ year, month, byDate, selectedType, onPlace, onOpen }: Props) {
-  const weeks = weeksOfMonth(year, month);
-
-  return (
-    <div className="md:hidden">
-      {weeks.map((wkStart) => (
-        <section key={iso(wkStart)} className="mb-4">
-          <div className="mb-1.5 rounded-im-day bg-im-extras px-2 py-1.5">
-            <WeekExtras weekKey={iso(wkStart)} wk={weekNr(wkStart)} row />
-          </div>
-
-          {Array.from({ length: 7 }, (_, i) => addDays(wkStart, i))
-            .filter((d) => d.getMonth() === month)
-            .map((d) => {
-              const ds = iso(d);
-              const items = byDate[ds] ?? [];
-              const isToday = ds === todayIso();
-              const isRace = ds === RACE_DATE;
-              return (
-                <div
-                  key={ds}
-                  className={`mb-1.5 flex gap-2 rounded-im-day p-2 ${
-                    isRace ? 'bg-im-race text-white' : 'bg-im-card shadow-im-day'
-                  } ${isToday ? 'outline outline-2 outline-im-accent' : ''}`}
-                >
-                  <div
-                    className={`w-[52px] shrink-0 text-[.74rem] font-bold ${
-                      isRace ? 'text-white' : 'text-im-muted'
-                    }`}
-                  >
-                    {DAY_NAMES[(d.getDay() + 6) % 7]} {d.getDate()}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    {isRace && (
-                      <div className="text-[.8rem] font-extrabold">
-                        🏁 IRONMAN 70.3 VALENCIA
-                      </div>
-                    )}
-                    {items.map((w) => (
-                      <WorkoutCard key={w.id} w={w} onOpen={() => onOpen(w.id)} />
-                    ))}
-                    {selectedType ? (
-                      <button
-                        onClick={() => onPlace(ds)}
-                        className="min-h-[36px] w-full rounded-im-ctl border border-dashed border-im-line text-[.78rem] font-semibold text-im-muted"
-                      >
-                        + hier plannen
-                      </button>
-                    ) : (
-                      items.length === 0 && (
-                        <div className="py-1 text-[.75rem] italic text-im-muted">
-                          {MONTH_NAMES[month].slice(0, 3)} — niets gepland
-                        </div>
-                      )
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-        </section>
-      ))}
-    </div>
   );
 }

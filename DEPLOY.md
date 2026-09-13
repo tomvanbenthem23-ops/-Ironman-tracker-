@@ -30,23 +30,8 @@ instelling op te slaan, en zo staat hij in versiebeheer.
 
 ## Nog te doen
 
-**1. Oude data importeren.** De losse HTML-tracker (`OneDrive/IRONMAN/ironman-tracker.html`)
-heeft een ⬇️ export-knop. Draai die één keer op elke laptop waar data op staat en
-POST elk bestand:
-
-```bash
-curl -X POST https://ironman-tracker-khaki.vercel.app/api/state \
-  -H "Content-Type: application/json" \
-  -H "Cookie: im_auth=<IM_PASSWORD>" \
-  -d "{\"import\": $(cat ironman-data-2027-01-15.json) }"
-```
-
-Importeren merget per record: een training met hetzelfde id wordt overschreven,
-de rest blijft staan. Je kunt dus veilig eerst Toms bestand en daarna dat van
-Quirijn inlezen.
-
-**2. De app bouwen** op basis van [`IRONMAN_PROMPT.md`](./IRONMAN_PROMPT.md).
-Op `/` staat nu alleen een casco-pagina.
+Niets. De agenda en het dashboard staan er; oude data wordt met de hand
+ingevoerd, dus er is geen migratie meer nodig.
 
 ## Kosten
 

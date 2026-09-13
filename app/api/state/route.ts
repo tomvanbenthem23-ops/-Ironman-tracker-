@@ -85,7 +85,6 @@ export async function GET() {
  *   { deleteWorkout: "<id>" }          -> één training verwijderen
  *   { weekly: {person, week, rek, zuipen, geneukt} }
  *   { garmin: {person, week, vo2, rhr, gewicht} }
- *   { import: <state-object volgens sectie 5> }  -> eenmalige migratie, merge per record
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -109,10 +108,6 @@ export async function POST(req: NextRequest) {
     if (body.garmin) {
       await upsertGarmin(body.garmin);
       return NextResponse.json({ ok: true });
-    }
-    if (body.import) {
-      const n = await importState(body.import);
-      return NextResponse.json({ ok: true, ...n });
     }
     return NextResponse.json({ error: 'Niets te doen' }, { status: 400 });
   } catch (e) {
@@ -177,38 +172,6 @@ async function upsertGarmin(r: any) {
     .onConflictDoUpdate({ target: [garmin.person, garmin.week], set: row });
 }
 
-/** Eenmalige import van een export uit de oude localStorage-versie. */
-async function importState(incoming: any) {
-  let w = 0;
-  let wk = 0;
-  let g = 0;
-  for (const workout of Object.values<any>(incoming.workouts || {})) {
-    await upsertWorkout(workout);
-    w++;
-  }
-  for (const [person, weeks] of Object.entries<any>(incoming.weekly || {})) {
-    for (const [week, rec] of Object.entries<any>(weeks || {})) {
-      // v1 sloeg deze velden op als booleans; v2 zijn het tellers
-      await upsertWeekly({
-        person,
-        week,
-        rek: toCounter(rec.rek),
-        zuipen: toCounter(rec.zuipen),
-        geneukt: toCounter(rec.geneukt)
-      });
-      wk++;
-    }
-  }
-  for (const [person, weeks] of Object.entries<any>(incoming.garmin || {})) {
-    for (const [week, rec] of Object.entries<any>(weeks || {})) {
-      await upsertGarmin({ person, week, ...rec });
-      g++;
-    }
-  }
-  return { workouts: w, weekly: wk, garmin: g };
-}
-
-const toCounter = (v: any) => (v === true ? 1 : Number(v) || 0);
 const num = (v: any) =>
   v === null || v === undefined || v === '' || isNaN(Number(v))
     ? null

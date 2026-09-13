@@ -26,9 +26,9 @@ export function Header({
   const { state, person, setPerson, saveState, pending, retry } = useStore();
 
   return (
-    <header className="bg-im-navy px-4 pb-3 pt-4 text-white sm:px-6">
+    <header className="bg-im-navy px-6 pb-3 pt-4 text-white">
       <div className="flex flex-wrap items-center justify-between gap-3.5">
-        <h1 className="text-[1.1rem] font-bold tracking-[.5px] sm:text-[1.35rem]">
+        <h1 className="text-[1.35rem] font-bold tracking-[.5px]">
           🏊🚴🏃 IRONMAN 70.3 VALENCIA
           <small className="mt-0.5 block text-[.8rem] font-normal text-im-navy-soft">
             Zondag 18 april 2027 · doel: onder de 5 uur
@@ -102,7 +102,7 @@ function PersonTab({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`min-h-[38px] rounded-t-im-day px-5 text-[1rem] font-semibold transition-colors sm:px-7 ${
+      className={`min-h-[38px] rounded-t-im-day px-7 text-[1rem] font-semibold transition-colors ${
         active ? 'bg-im-bg text-im-ink' : 'bg-white/15 text-[#cfdcea] hover:bg-white/25'
       }`}
     >

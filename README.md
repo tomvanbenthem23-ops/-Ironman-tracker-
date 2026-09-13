@@ -30,11 +30,8 @@ is genoeg (sectie 2 van de prompt).
 |---|---|
 | `GET /api/migrate` | Maakt de tabellen aan. Eenmalig na de eerste deploy, idempotent. |
 | `GET /api/state` | Hele state in de vorm van sectie 5 van de prompt. |
-| `POST /api/state` | `{workout}` · `{deleteWorkout}` · `{weekly}` · `{garmin}` · `{import}` |
+| `POST /api/state` | `{workout}` · `{deleteWorkout}` · `{weekly}` · `{garmin}` |
 | `POST /api/login` | Zet het cookie. `DELETE` logt uit. |
-
-De `{import}`-variant slikt een export uit de oude losse HTML-versie
-(`ironman-data-YYYY-MM-DD.json`) en merget die per record.
 
 ## Lokaal draaien
 

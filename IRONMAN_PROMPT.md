@@ -19,12 +19,11 @@ It is a private tool for exactly two people. It is not a general-purpose trainin
 
 - **All UI text and content must be Dutch**, in an informal tone (`je`/`jullie`, not `u`). Every label, button, placeholder, empty state and generated sentence is Nederlandstalig. Only this build prompt is in English.
 - **The tone and the in-jokes are deliberate.** The app tracks, per week, three side activities with emoji: 🧘 `rek` (stretching sessions), 🍺 `zuipen` (nights out drinking), 🍆 `geneukt` (sex). A "🐼 panda counter" per person is derived from the last one. **Do not sanitise, rename, soften, hide, or "professionalise" any of this** — it is the point of the app for its two users. Keep the emoji and the labels exactly as specified.
-- **Data must persist server-side and be shared** between both users. Tom logging a session on his phone must show up on Quirijn's laptop, and each of them can see and edit the other's data. Local-only browser storage is explicitly not sufficient.
+- **Data must persist server-side and be shared** between both users. Tom logging a session on his laptop must show up on Quirijn's, and each of them can see and edit the other's data. Local-only browser storage is explicitly not sufficient.
 - **No real-time requirement.** Refresh-on-navigation, or polling every 30–60s while the tab is visible, is enough. No websockets or live sync.
 - **"Last write wins" is acceptable** conflict resolution. No merge logic, no per-field conflict UI.
 - **One shared password is sufficient authentication** for the whole app. Per-user accounts, roles, or SSO are explicitly **not** required — both users are effectively the same account, and the person switcher (section 3) is a *view* control, not a permission boundary.
 - **Never lose an edit silently.** The header carries a save-state indicator with the states `·` (idle), `⏳ opslaan…`, `✓ opgeslagen`, `✓ geladen`, `⚠️ fout bij opslaan`. If a save fails, the UI must say so and the user's input must remain visible and recoverable in their own browser.
-- **One-time migration path.** The app must accept an upload of a JSON file in exactly the shape of section 5 and merge it into the stored data (per-record merge: incoming workouts overwrite by id; incoming weekly/garmin records overwrite by person + week key; nothing else is touched). This is how the existing users' localStorage data from the previous version gets in. It is a one-time utility, not a feature that needs to be prominent.
 
 ## 3. Users & views
 
@@ -52,7 +51,7 @@ Two orthogonal switchers, both always visible in the header:
 
 ## 5. Data model
 
-Three collections, all keyed by person. If the template offers a real database, model these as three tables (`workouts`, `weekly`, `garmin`) rather than one JSON blob; the shapes below are the contract that the JSON import (section 2) and any export must satisfy.
+Three collections, all keyed by person. If the template offers a real database, model these as three tables (`workouts`, `weekly`, `garmin`) rather than one JSON blob; the shapes below are the contract every read and write goes through.
 
 ```json
 {
@@ -87,7 +86,7 @@ Rules that must hold:
 - **Week keys are always the ISO date of that week's Monday.** Weeks run Monday–Sunday throughout the app (calendar rows, weekly counters, Garmin check-ins, targets, panda scoring).
 - **Training type keys are stable identifiers and must never be renamed**, because stored workouts reference them.
 - `stats` fields are all optional and nullable. `done` is the checkbox "training gedaan"; everything else may be empty. `tijdMin` is **decimal minutes**. `afstand` is in km, except for swimming where it is in **metres**. `snelheid` is in the unit of its discipline (section 8). `hoogte` is elevation gain in metres and does not apply to swimming; `vermogen` is average watts and applies only to cycling. `rpe` is 1–10, default 5.
-- **Normalisation on every load and import**: an older version stored the three weekly side-activity fields as booleans; they are now counters. `true` → `1`, anything non-numeric → `0`. Missing collections default to empty objects.
+- **Missing collections default to empty objects** on load, so nothing downstream has to null-check them.
 
 ## 6. Training types & key dates — fixed configuration
 
@@ -310,18 +309,15 @@ Recreate this design system through whatever theming mechanism the template uses
 
 **Status colours** for target hit/close/miss map to good/warning/bad. Trend markers use good/bad/muted. Red is reserved for genuinely negative states — it is never used for the panda counter or the side activities, which are neutral.
 
-## 10. Responsiveness, mobile agenda & accessibility
+## 10. Interaction & accessibility
 
-The previous version was desktop-only; this one is used on a phone at the side of the pool, so:
+This is a laptop app. It does not need a phone or tablet layout — see section 11.
 
-- **Tap-to-add is a primary interaction, never a fallback.** On any viewport: tap a palette type to select it, tap a day to place it. Drag-and-drop is an enhancement layered on top for pointer devices. The app must be fully usable with no drag gesture at all — including *moving* a session, which needs a date field or a "verplaats" action in the modal.
-- On narrow viewports the palette becomes a horizontally scrollable chip row above the calendar rather than a sidebar.
-- On narrow viewports the calendar drops the 8-column month grid, which is unreadable at that width. Show the current week (or an agenda-style day list) with the same session cards, week counters and targets, and keep the month view available on wider screens.
-- The workout modal becomes a full-height sheet on phones, with inputs large enough to hit and the correct on-screen keyboards (numeric where appropriate).
-- Dashboard cards stack to one column; the finish-time card keeps its splits readable by wrapping them.
+- **Planning must not require a drag gesture.** Click a palette type to select it, click a day to place it; drag-and-drop from the palette and between days works too, but is never the only way. The same goes for *moving* a session: the modal carries a date field, so a session can be rescheduled without dragging.
 - Background refreshes must never steal focus or overwrite a field the user is currently editing — guard re-renders against in-progress input.
 - Inputs, selects and buttons need visible focus states; the ± counter buttons and the palette items need real hit targets (≥32px) and accessible labels, since their visible content is a bare emoji or symbol.
 - The countdown ticks every second: don't let it force a re-render of the whole page.
+- The calendar is a wide table: give it its own horizontally scrollable container so a narrow browser window scrolls the table rather than breaking the page.
 
 ## 11. Explicitly out of scope for v1
 
@@ -330,6 +326,8 @@ The previous version was desktop-only; this one is used on a phone at the side o
 - Editing the training-type catalogue, goals or key dates from the UI — these are fixed configuration (section 6).
 - Real-time collaboration beyond "last write wins".
 - Notifications, reminders, undo history, or edit history.
+- A phone or tablet layout. Both users log their sessions on a laptop.
+- Importing data from the previous HTML tracker. Older sessions are typed in by hand.
 - Support for other athletes, other races, or other distances.
 
 ## 12. Instructions to the coding assistant
@@ -338,5 +336,5 @@ The previous version was desktop-only; this one is used on a phone at the side o
 2. Treat section 6 as fixed configuration in code (a single module), not as user data, and section 8 as the specification for a small, separately testable calculation layer — pure functions over the data model in section 5, with no UI in them.
 3. Write tests for section 8 at minimum: the hours:minutes rounding case (359.7 minutes → `6:00`, never `5:60`), baseline scaling for a phase-2 type with no history of its own, target interpolation at `T0`/mid/`T1`, the already-better-than-goal 4% rule, hit/close/miss classification in both directions, the weighted 42-day recency average, and the panda counter across a part-elapsed week.
 4. Apply the design system in section 9 through the template's native theming.
-5. Meet the mobile and accessibility expectations in section 10 — particularly the no-drag path, which is the one genuinely new requirement compared to the previous version.
+5. Meet the interaction and accessibility expectations in section 10 — particularly the no-drag path for planning and moving sessions.
 6. Keep every piece of user-facing copy Dutch and informal, including empty states and error messages you have to invent, and keep the panda counter and side activities exactly as specified in section 2.
