@@ -258,7 +258,7 @@ function DisciplineCard({
 /* ================= Garmin ================= */
 
 function GarminCard() {
-  const { state, person, saveGarmin, setEditing } = useStore();
+  const { state, person, saveGarmin, saveSettings, setEditing } = useStore();
   const wkNow = weekKeyOf(new Date());
   const g = garminRec(state, person, wkNow);
 
@@ -272,8 +272,21 @@ function GarminCard() {
     saveGarmin(wkNow, { ...g, [field]: Number.isNaN(v as number) ? null : v });
   };
 
+  const auto = !!state.integrations[person];
+  const ps = state.settings[person] ?? {};
+  const last = ps.lastSync ? new Date(ps.lastSync) : null;
+  const num = (raw: string) => (raw === '' || Number.isNaN(Number(raw)) ? null : Number(raw));
+
   return (
-    <Card title="⌚ Garmin check-in (wekelijks)">
+    <Card title={auto ? '⌚ Garmin (automatisch)' : '⌚ Garmin check-in (wekelijks)'}>
+      {auto && (
+        <div className="-mt-1.5 mb-1 text-[.72rem] text-im-muted">
+          via intervals.icu
+          {last &&
+            ` · laatst opgehaald ${last.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} ${last.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`}
+          {' · '}je kunt een waarde altijd overschrijven
+        </div>
+      )}
       <div className="mt-1.5 grid grid-cols-3 gap-2">
         <GarminInput label="VO2max" value={g.vo2} placeholder="bv. 50"
           onCommit={(v) => set('vo2', v)} onFocus={setEditing} />
@@ -291,11 +304,36 @@ function GarminCard() {
       ) : (
         <div className="mt-2">
           <NoData>
-            Vul dit wekelijks in vanaf je Garmin — VO2max en rust-HR zijn de beste
-            onafhankelijke check op mijn schatting.
+            {auto
+              ? 'VO2max en rust-HR komen vanzelf binnen zodra je horloge ze heeft.'
+              : 'Vul dit wekelijks in vanaf je Garmin — VO2max en rust-HR zijn de beste onafhankelijke check op mijn schatting.'}
           </NoData>
         </div>
       )}
+
+      <div className="mt-3 border-t border-dashed border-im-hairline pt-2.5">
+        <div className="mb-1 flex items-baseline justify-between text-[.72rem] uppercase tracking-[.5px] text-im-muted">
+          <span>Zone 2 (long runs)</span>
+          <span className="normal-case tracking-normal">
+            {ps.z2Source === 'garmin'
+              ? 'uit je Garmin-zones'
+              : ps.z2Source === 'manual'
+                ? 'zelf ingevuld'
+                : 'nog niet ingesteld'}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <GarminInput label="Van (bpm)" value={ps.z2Low} placeholder="bv. 130"
+            onCommit={(v) => num(v) !== (ps.z2Low ?? null) && saveSettings({ z2Low: num(v), z2High: ps.z2High ?? null })}
+            onFocus={setEditing} />
+          <GarminInput label="Tot (bpm)" value={ps.z2High} placeholder="bv. 148"
+            onCommit={(v) => num(v) !== (ps.z2High ?? null) && saveSettings({ z2Low: ps.z2Low ?? null, z2High: num(v) })}
+            onFocus={setEditing} />
+          <GarminInput label="FTP (W)" value={ps.ftp} placeholder="optioneel"
+            onCommit={(v) => num(v) !== (ps.ftp ?? null) && saveSettings({ ftp: num(v) })}
+            onFocus={setEditing} />
+        </div>
+      </div>
     </Card>
   );
 }

@@ -45,7 +45,8 @@ export type Block = {
 export type WindDir = 'tegen' | 'mee' | 'zij' | 'wisselend';
 
 export type Wind = {
-  source: 'manual' | 'open-meteo';
+  /** 'auto' = uit het weer tijdens de rit (via intervals.icu). */
+  source: 'manual' | 'auto';
   bft?: number | null;
   dir?: WindDir | null;
   speedKmh?: number | null;
@@ -101,6 +102,8 @@ export type State = {
   settings: Record<string, PersonSettings>;
   /** Alleen weken die afwijken van het standaardritme. */
   weekFlags: Record<string, WeekKind>;
+  /** Wie een intervals.icu-koppeling heeft. */
+  integrations: Record<string, boolean>;
 };
 
 export const emptyState = (): State => ({
@@ -110,5 +113,6 @@ export const emptyState = (): State => ({
   weekly: {},
   garmin: {},
   settings: {},
-  weekFlags: {}
+  weekFlags: {},
+  integrations: {}
 });

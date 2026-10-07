@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, workouts, weekly, garmin, personSettings, weekFlags } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import { rowToWorkout, workoutToRow } from '@/lib/rows';
+import { icuCreds } from '@/lib/icu';
+import { PERSONS } from '@/lib/config';
 
 export const dynamic = 'force-dynamic';
 export const preferredRegion = 'fra1'; // Frankfurt: naast de Neon-database
@@ -24,7 +26,9 @@ export async function GET() {
       weekly: {},
       garmin: {},
       settings: {},
-      weekFlags: {}
+      weekFlags: {},
+      // wie een intervals.icu-koppeling heeft (alleen ja/nee, nooit de sleutel)
+      integrations: Object.fromEntries(PERSONS.map((p) => [p, !!icuCreds(p)]))
     };
     for (const r of wRows) state.workouts[r.id] = rowToWorkout(r);
     for (const r of weekRows) {

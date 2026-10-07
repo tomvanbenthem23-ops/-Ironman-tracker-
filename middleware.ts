@@ -12,6 +12,12 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // de dagelijkse Vercel Cron heeft geen cookie, wel CRON_SECRET
+  const cron = process.env.CRON_SECRET;
+  if (pathname === '/api/sync' && cron && req.headers.get('authorization') === `Bearer ${cron}`) {
+    return NextResponse.next();
+  }
+
   const cookie = req.cookies.get(COOKIE_NAME)?.value;
   if (cookie === password) return NextResponse.next();
 

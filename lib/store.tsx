@@ -54,7 +54,11 @@ type Ctx = {
   setWeekFlag: (weekKey: string, kind: WeekKind | null) => void;
   retry: () => void;
   refresh: () => void;
+  syncState: SyncState;
+  syncGarmin: () => void;
 };
+
+export type SyncState = { status: 'idle' | 'syncing' | 'ok' | 'error'; message: string };
 
 const StoreContext = createContext<Ctx | null>(null);
 const PENDING_KEY = 'im_pending_v1';
@@ -140,16 +144,46 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const res = await fetch('/api/state', { cache: 'no-store' });
         if (!res.ok) throw new Error(String(res.status));
         const body = await res.json();
-        setState(normalize(body.data));
+        const next = normalize(body.data);
+        setState(next);
         setReady(true);
         if (!silent) setSaveState('loaded');
+        return next;
       } catch {
         setReady(true);
         if (!silent) setSaveState('error');
+        return null;
       }
     },
     []
   );
+
+  /* ---------- Garmin via intervals.icu ---------- */
+  const [syncState, setSyncState] = useState<SyncState>({ status: 'idle', message: '' });
+
+  const syncGarmin = useCallback(async () => {
+    setSyncState({ status: 'syncing', message: 'Garmin ophalen…' });
+    try {
+      const res = await fetch('/api/sync', { method: 'POST' });
+      const body = await res.json();
+      const failed = (body.results ?? []).find((r: any) => !r.ok);
+      if (failed) throw new Error(failed.error);
+      const n = (body.results ?? []).reduce(
+        (a: number, r: any) => a + (r.created ?? 0) + (r.matched ?? 0),
+        0
+      );
+      setSyncState({
+        status: 'ok',
+        message: n ? `⌚ ${n} nieuwe training${n === 1 ? '' : 'en'}` : '⌚ bijgewerkt'
+      });
+      if (!editing.current) await load(true);
+    } catch (e) {
+      setSyncState({
+        status: 'error',
+        message: '⚠️ Garmin: ' + (e instanceof Error ? e.message : 'mislukt')
+      });
+    }
+  }, [load]);
 
   useEffect(() => {
     try {
@@ -159,7 +193,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setPending(queue.current.length);
       }
     } catch {}
-    void load().then(() => flush());
+    void load().then((s) => {
+      void flush();
+      if (s && needsSync(s)) void syncGarmin();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -296,11 +333,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       saveSettings,
       setWeekFlag,
       retry: () => void flush(),
-      refresh: () => void load()
+      refresh: () => void load(),
+      syncState,
+      syncGarmin: () => void syncGarmin()
     }),
     [
       state, ready, saveState, pending, person, setPerson,
-      addWorkout, saveWorkout, deleteWorkout, bumpWeekly, saveGarmin, saveSettings, setWeekFlag, flush, load
+      addWorkout, saveWorkout, deleteWorkout, bumpWeekly, saveGarmin, saveSettings, setWeekFlag, flush, load, syncState, syncGarmin
     ]
   );
 
@@ -321,6 +360,7 @@ function normalize(raw: any): State {
   s.garmin = s.garmin || {};
   s.settings = s.settings || {};
   s.weekFlags = s.weekFlags || {};
+  s.integrations = s.integrations || {};
   for (const id of Object.keys(s.workouts)) {
     s.workouts[id].stats = s.workouts[id].stats || {};
   }
@@ -328,3 +368,14 @@ function normalize(raw: any): State {
 }
 
 export { weekKeyOf };
+
+const SYNC_EVERY_MS = 15 * 60 * 1000;
+
+/** Iemand gekoppeld en diens laatste sync is ouder dan een kwartier? */
+function needsSync(s: State) {
+  return Object.entries(s.integrations).some(([p, on]) => {
+    if (!on) return false;
+    const last = s.settings[p]?.lastSync;
+    return !last || Date.now() - new Date(last).getTime() > SYNC_EVERY_MS;
+  });
+}

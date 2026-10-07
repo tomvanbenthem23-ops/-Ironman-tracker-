@@ -23,7 +23,8 @@ export function Header({
   view: View;
   setView: (v: View) => void;
 }) {
-  const { state, person, setPerson, saveState, pending, retry } = useStore();
+  const { state, person, setPerson, saveState, pending, retry, syncState, syncGarmin } =
+    useStore();
 
   return (
     <header className="bg-im-navy px-6 pb-3 pt-4 text-white">
@@ -73,6 +74,26 @@ export function Header({
         </div>
 
         <div className="flex items-center gap-2 text-[.78rem] text-im-navy-soft">
+          {Object.values(state.integrations).some(Boolean) && (
+            <>
+              {syncState.message && (
+                <span
+                  aria-live="polite"
+                  className={syncState.status === 'error' ? 'text-im-on-navy-bad' : ''}
+                >
+                  {syncState.message}
+                </span>
+              )}
+              <button
+                onClick={syncGarmin}
+                disabled={syncState.status === 'syncing'}
+                title="Nieuwe trainingen, VO2max en rusthartslag ophalen via intervals.icu"
+                className="rounded-im-ctl bg-white/15 px-2.5 py-1 font-semibold text-white hover:bg-white/25 disabled:opacity-50"
+              >
+                🔄 Garmin
+              </button>
+            </>
+          )}
           <span aria-live="polite">{SAVE_LABEL[saveState]}</span>
           {saveState === 'error' && pending > 0 && (
             <button

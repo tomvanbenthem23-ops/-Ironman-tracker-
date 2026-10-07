@@ -28,10 +28,23 @@ instelling op te slaan, en zo staat hij in versiebeheer.
 - [x] Gecontroleerd: `/` stuurt door naar `/login`, `/api/*` geeft 401 zonder cookie,
       `/api/state` geeft een lege state terug
 
-## Nog te doen
+## Garmin koppelen (via intervals.icu)
 
-Niets. De agenda en het dashboard staan er; oude data wordt met de hand
-ingevoerd, dus er is geen migratie meer nodig.
+Garmin geeft particulieren geen API; intervals.icu is officieel aan Garmin
+Connect gekoppeld en heeft wel een API. Per persoon, eenmalig:
+
+1. Account maken op intervals.icu en onder **Settings → Garmin** Garmin
+   Connect koppelen. Zet daar ook het vinkje voor VO2max (en wellness:
+   rusthartslag, gewicht) aan. Koppel Garmin **rechtstreeks**, niet via Strava:
+   Strava-activiteiten geeft intervals.icu niet door via de API.
+2. **Settings → Developer Settings → API key** aanmaken.
+3. In Vercel → Settings → Environment Variables: `ICU_TOM_API_KEY` (en voor
+   Quirijn later `ICU_QUIRIJN_API_KEY`). Daarnaast één keer `CRON_SECRET`
+   (willekeurige lange string) voor de dagelijkse sync om 05:00 UTC.
+4. Redeploy. De app haalt dan bij openen (en via 🔄 Garmin) alles op vanaf
+   1 september en koppelt het aan wat er gepland of al ingevuld was.
+
+Na elke deploy die het schema uitbreidt: eenmalig `/api/migrate` openen.
 
 ## Kosten
 

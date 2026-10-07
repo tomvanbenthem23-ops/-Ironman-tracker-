@@ -101,7 +101,7 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
 
   const isKracht = t.cat === 'kracht';
   const fromGarmin = w.source === 'icu';
-  const autoWind = w.wind?.source === 'open-meteo';
+  const autoWind = w.wind?.source === 'auto';
   const d = fromIso(w.date);
   const tgt = isKracht ? null : targetFor(state, w.person, w.type, w.date);
 

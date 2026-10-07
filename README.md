@@ -30,7 +30,8 @@ is genoeg (sectie 2 van de prompt).
 |---|---|
 | `GET /api/migrate` | Maakt de tabellen aan. Eenmalig na de eerste deploy, idempotent. |
 | `GET /api/state` | Hele state in de vorm van sectie 5 van de prompt. |
-| `POST /api/state` | `{workout}` · `{deleteWorkout}` · `{weekly}` · `{garmin}` |
+| `POST /api/state` | `{workout}` · `{deleteWorkout}` · `{weekly}` · `{garmin}` · `{settings}` · `{weekFlag}` |
+| `POST /api/sync` | Garmin-data ophalen via intervals.icu (activiteiten met intervallen, VO2max, rusthartslag, gewicht, hartslagzones). Ook dagelijks via Vercel Cron. |
 | `POST /api/login` | Zet het cookie. `DELETE` logt uit. |
 
 ## Lokaal draaien
