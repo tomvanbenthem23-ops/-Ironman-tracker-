@@ -127,6 +127,24 @@ describe('fitheidsankers', () => {
     expect(a.value).toBeCloseTo((77 / 16) * Math.pow(60 / 77, 0.06), 4);
   });
 
+  it('schat zonder drempelsessie het drempeltempo uit tempo + hartslag', () => {
+    // zoals Toms september: rustige runs met hartslag, geen harde blokken
+    const run = (date: string, km: number, min: number, hr: number, max: number) =>
+      wo({ type: 'lange_run', date, stats: { done: true, afstand: km, tijdMin: min, gemHr: hr, maxHr: max } });
+    const s = state([
+      run('2026-09-14', 10.02, 53.4, 154, 168),
+      run('2026-09-20', 16, 97.5, 144, 158),
+      run('2026-09-24', 10, 57.3, 150, 182),
+      run('2026-09-29', 14.66, 81.7, 156, 181)
+    ]);
+    const a = runThreshold(s, 'tom', '2026-10-06')!;
+    // omslag ≈ 0,92 × 182 = 167, rust 55: rond 4:50 /km in plaats van ±5:22 uit de snelste run
+    expect(a.value).toBeGreaterThan(4.6);
+    expect(a.value).toBeLessThan(5.0);
+    expect(a.basis[0]).toContain('omslag 167');
+    expect(a.confidence).not.toBe('hoog');
+  });
+
   it('kijkt alleen naar trainingen vóór de peildatum', () => {
     const s = state([longRun('2026-10-10', 14)]);
     expect(anchors(s, 'tom', '2026-10-10').longRunKm).toBeNull();
@@ -235,6 +253,11 @@ describe('kwaliteitstrainingen', () => {
     expect(p.summary).toBe('2×10 min · 204–216 W');
     const e = prescribe(s, wo({ type: 'lange_fiets', date: '2026-10-08' }))!;
     expect(e.summary).toContain('134–180 W');
+  });
+
+  it('geeft vóór 5 oktober geen voorschrift: september was warm-up', () => {
+    expect(prescribe(state([]), wo({ type: 'korte_run', date: '2026-10-03' }))).toBeNull();
+    expect(prescribe(state([]), wo({ type: 'korte_run', date: '2026-10-05' }))).not.toBeNull();
   });
 
   it('kracht krijgt geen voorschrift', () => {

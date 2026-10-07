@@ -143,6 +143,10 @@ export function runThreshold(state: State, person: Person, asOf: string): Anchor
     };
   }
 
+  // zonder harde blokken: uit tempo + hartslag, doorgetrokken naar het omslagpunt
+  const fromHr = runThresholdFromHr(state, person, asOf);
+  if (fromHr) return fromHr;
+
   const efforts = runs
     .map((w) => {
       const p = derivedSpeed(w);
@@ -162,6 +166,63 @@ export function runThreshold(state: State, person: Person, asOf: string): Anchor
     basis: [`snelste run (${best.km.toFixed(1).replace('.', ',')} km op ${day(best.d)}), omgerekend`],
     // één doorgaande run zegt minder dan echte drempelblokken
     confidence: 'laag'
+  };
+}
+
+/**
+ * Hartslag op het omslagpunt (LTHR): uit de instellingen, anders 92% van de
+ * max-HR, anders 92% van de hoogste hartslag in je runs van de laatste 90 dagen
+ * (minstens drie runs met hartslag).
+ */
+export function thresholdHr(state: State, person: Person, asOf: string): number | null {
+  const s = state.settings[person] ?? {};
+  if (s.lthr) return s.lthr;
+  if (s.maxHr) return Math.round(s.maxHr * 0.92);
+  const maxes = window(state, person, asOf, 90)
+    .filter((w) => catOf(w) === 'run' && w.stats?.maxHr)
+    .map((w) => w.stats.maxHr!);
+  return maxes.length >= 3 ? Math.round(Math.max(...maxes) * 0.92) : null;
+}
+
+/** Rusthartslag: laatste Garmin-waarde, anders 55. */
+export function restingHr(state: State, person: Person): number {
+  const weeks = Object.entries(state.garmin[person] ?? {})
+    .filter(([, r]) => r.rhr)
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  return weeks.length ? weeks[weeks.length - 1][1].rhr! : 55;
+}
+
+/**
+ * Drempeltempo uit gewone runs: snelheid schaalt grofweg lineair met de
+ * hartslagreserve. Een run op 5:20 /km bij HR 154 met rust 55 en omslag 167
+ * zegt: op het omslagpunt ±13% sneller, dus ±4:43 /km. Mediaan van de laatste
+ * vijf runs van 20+ minuten; hooguit 35% sneller doortrekken.
+ */
+function runThresholdFromHr(state: State, person: Person, asOf: string): Anchor | null {
+  const lthr = thresholdHr(state, person, asOf);
+  if (!lthr) return null;
+  const rhr = restingHr(state, person);
+  const xs = window(state, person, asOf, 42)
+    .filter((w) => catOf(w) === 'run' && (w.stats?.tijdMin ?? 0) >= 20 && w.stats?.gemHr)
+    .map((w) => {
+      const pace = derivedSpeed(w);
+      const hr = w.stats.gemHr!;
+      if (!pace || hr <= rhr + 10 || hr >= lthr) return null;
+      const factor = Math.min(1.35, (lthr - rhr) / (hr - rhr));
+      return { v: pace / factor, d: w.date };
+    })
+    .filter((x): x is { v: number; d: string } => !!x)
+    .slice(-5);
+  if (!xs.length) return null;
+  const latest = xs[xs.length - 1].d;
+  const conf = confidenceOf(xs.length, ageOf(latest, asOf));
+  return {
+    value: median(xs.map((x) => x.v)),
+    n: xs.length,
+    latest,
+    basis: [`${xs.length} run${xs.length === 1 ? '' : 's'} met hartslag, doorgetrokken naar omslag ${lthr}`],
+    // een schatting via hartslag is nooit zo goed als een echte drempelsessie
+    confidence: conf === 'hoog' ? 'gemiddeld' : conf
   };
 }
 

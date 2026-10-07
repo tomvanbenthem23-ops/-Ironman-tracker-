@@ -152,6 +152,8 @@ export type Prescription = {
 export function prescribe(state: State, w: Workout): Prescription | null {
   const cat = catOf(w);
   if (cat === 'kracht') return null;
+  // september was warm-up: het coachen begint in de week van 5 oktober
+  if (fromIso(w.date) < BLOCK_START) return null;
   const kind = kindOf(w);
   const wk = weekKind(state, w.date);
   const step = buildStep(state, w.date);
