@@ -1,76 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, workouts, weekly, garmin } from '@/lib/db';
+import { db, workouts, weekly, garmin, personSettings, weekFlags } from '@/lib/db';
 import { eq } from 'drizzle-orm';
+import { rowToWorkout, workoutToRow } from '@/lib/rows';
 
 export const dynamic = 'force-dynamic';
 export const preferredRegion = 'fra1'; // Frankfurt: naast de Neon-database
 
-type StateShape = {
-  version: 2;
-  updatedAt: string | null;
-  workouts: Record<string, any>;
-  weekly: Record<string, Record<string, any>>;
-  garmin: Record<string, Record<string, any>>;
-};
-
-/** Rijen uit de database terug naar de state-vorm van sectie 5. */
-function toState(
-  wRows: any[],
-  weekRows: any[],
-  garminRows: any[]
-): StateShape {
-  const state: StateShape = {
-    version: 2,
-    updatedAt: new Date().toISOString(),
-    workouts: {},
-    weekly: {},
-    garmin: {}
-  };
-  for (const r of wRows) {
-    state.workouts[r.id] = {
-      id: r.id,
-      person: r.person,
-      type: r.type,
-      date: r.date,
-      stats: {
-        done: r.done,
-        tijdMin: r.tijdMin,
-        gemHr: r.gemHr,
-        maxHr: r.maxHr,
-        afstand: r.afstand,
-        snelheid: r.snelheid,
-        hoogte: r.hoogte,
-        vermogen: r.vermogen,
-        rpe: r.rpe
-      }
-    };
-  }
-  for (const r of weekRows) {
-    (state.weekly[r.person] ||= {})[r.week] = {
-      rek: r.rek,
-      zuipen: r.zuipen,
-      geneukt: r.geneukt
-    };
-  }
-  for (const r of garminRows) {
-    (state.garmin[r.person] ||= {})[r.week] = {
-      vo2: r.vo2,
-      rhr: r.rhr,
-      gewicht: r.gewicht
-    };
-  }
-  return state;
-}
-
-/** Hele state ophalen. */
+/** Hele state ophalen, in de vorm van sectie 5 van de spec. */
 export async function GET() {
   try {
-    const [wRows, weekRows, garminRows] = await Promise.all([
+    const [wRows, weekRows, garminRows, settingRows, flagRows] = await Promise.all([
       db.select().from(workouts),
       db.select().from(weekly),
-      db.select().from(garmin)
+      db.select().from(garmin),
+      db.select().from(personSettings),
+      db.select().from(weekFlags)
     ]);
-    return NextResponse.json({ data: toState(wRows, weekRows, garminRows) });
+
+    const state: any = {
+      version: 2,
+      updatedAt: new Date().toISOString(),
+      workouts: {},
+      weekly: {},
+      garmin: {},
+      settings: {},
+      weekFlags: {}
+    };
+    for (const r of wRows) state.workouts[r.id] = rowToWorkout(r);
+    for (const r of weekRows) {
+      (state.weekly[r.person] ||= {})[r.week] = {
+        rek: r.rek,
+        zuipen: r.zuipen,
+        geneukt: r.geneukt
+      };
+    }
+    for (const r of garminRows) {
+      (state.garmin[r.person] ||= {})[r.week] = { vo2: r.vo2, rhr: r.rhr, gewicht: r.gewicht };
+    }
+    for (const r of settingRows) {
+      state.settings[r.person] = {
+        z2Low: r.z2Low,
+        z2High: r.z2High,
+        maxHr: r.maxHr,
+        lthr: r.lthr,
+        ftp: r.ftp,
+        z2Source: r.z2Source,
+        lastSync: r.lastSync ? r.lastSync.toISOString() : null
+      };
+    }
+    for (const r of flagRows) state.weekFlags[r.week] = r.kind;
+
+    return NextResponse.json({ data: state });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
@@ -81,10 +61,12 @@ export async function GET() {
 
 /**
  * Schrijven. Body:
- *   { workout: {...} }                 -> één training opslaan (upsert)
- *   { deleteWorkout: "<id>" }          -> één training verwijderen
+ *   { workout: {...} }                   -> één training opslaan (upsert)
+ *   { deleteWorkout: "<id>" }            -> één training verwijderen
  *   { weekly: {person, week, rek, zuipen, geneukt} }
  *   { garmin: {person, week, vo2, rhr, gewicht} }
+ *   { settings: {person, z2Low, z2High, maxHr, ftp} }   -> handmatige instellingen
+ *   { weekFlag: {week, kind | null} }    -> week omzetten; null = terug naar standaard
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -94,7 +76,8 @@ export async function POST(req: NextRequest) {
 
   try {
     if (body.workout) {
-      await upsertWorkout(body.workout);
+      const row = workoutToRow(body.workout);
+      await db.insert(workouts).values(row).onConflictDoUpdate({ target: workouts.id, set: row });
       return NextResponse.json({ ok: true });
     }
     if (typeof body.deleteWorkout === 'string') {
@@ -109,6 +92,22 @@ export async function POST(req: NextRequest) {
       await upsertGarmin(body.garmin);
       return NextResponse.json({ ok: true });
     }
+    if (body.settings) {
+      await upsertSettings(body.settings);
+      return NextResponse.json({ ok: true });
+    }
+    if (body.weekFlag && typeof body.weekFlag.week === 'string') {
+      const { week, kind } = body.weekFlag;
+      if (kind === null) {
+        await db.delete(weekFlags).where(eq(weekFlags.week, week));
+      } else if (['build', 'rest', 'taper', 'race'].includes(kind)) {
+        const row = { week, kind, updatedAt: new Date() };
+        await db.insert(weekFlags).values(row).onConflictDoUpdate({ target: weekFlags.week, set: row });
+      } else {
+        return NextResponse.json({ error: 'Onbekend weektype' }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true });
+    }
     return NextResponse.json({ error: 'Niets te doen' }, { status: 400 });
   } catch (e) {
     return NextResponse.json(
@@ -116,30 +115,6 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-async function upsertWorkout(w: any) {
-  const s = w.stats || {};
-  const row = {
-    id: String(w.id),
-    person: String(w.person),
-    type: String(w.type),
-    date: String(w.date),
-    done: !!s.done,
-    tijdMin: num(s.tijdMin),
-    gemHr: int(s.gemHr),
-    maxHr: int(s.maxHr),
-    afstand: num(s.afstand),
-    snelheid: num(s.snelheid),
-    hoogte: int(s.hoogte),
-    vermogen: int(s.vermogen),
-    rpe: int(s.rpe),
-    updatedAt: new Date()
-  };
-  await db
-    .insert(workouts)
-    .values(row)
-    .onConflictDoUpdate({ target: workouts.id, set: row });
 }
 
 async function upsertWeekly(r: any) {
@@ -172,10 +147,25 @@ async function upsertGarmin(r: any) {
     .onConflictDoUpdate({ target: [garmin.person, garmin.week], set: row });
 }
 
+/** Handmatige instellingen. Zone 2 met de hand = bron 'manual'; sync blijft daar dan van af. */
+async function upsertSettings(r: any) {
+  const person = String(r.person);
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if ('z2Low' in r || 'z2High' in r) {
+    set.z2Low = int(r.z2Low);
+    set.z2High = int(r.z2High);
+    set.z2Source = set.z2Low == null && set.z2High == null ? null : 'manual';
+  }
+  if ('maxHr' in r) set.maxHr = int(r.maxHr);
+  if ('ftp' in r) set.ftp = int(r.ftp);
+  await db
+    .insert(personSettings)
+    .values({ person, ...set })
+    .onConflictDoUpdate({ target: personSettings.person, set });
+}
+
 const num = (v: any) =>
-  v === null || v === undefined || v === '' || isNaN(Number(v))
-    ? null
-    : Number(v);
+  v === null || v === undefined || v === '' || isNaN(Number(v)) ? null : Number(v);
 const int = (v: any) => {
   const n = num(v);
   return n === null ? null : Math.round(n);

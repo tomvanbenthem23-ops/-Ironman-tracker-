@@ -1,5 +1,6 @@
 import {
   BETTER,
+  DEFAULT_KIND,
   DISC_REF,
   GOAL_MIN,
   PANDA_START,
@@ -11,7 +12,7 @@ import {
   TARGET_FROM,
   TYPES
 } from './config';
-import type { Discipline, Person, State, Workout } from './types';
+import type { Block, Discipline, Kind, Person, State, Workout } from './types';
 
 /**
  * Rekenlaag — sectie 8 van IRONMAN_PROMPT.md.
@@ -401,7 +402,7 @@ export function weekVolume(state: State, person: Person, weekKey: string): numbe
   const end = iso(addDays(fromIso(weekKey), 7));
   return (
     doneWorkouts(state, person)
-      .filter((w) => w.date >= weekKey && w.date < end)
+      .filter((w) => w.date >= weekKey && w.date < end && !isStrength(w))
       .reduce((a, w) => a + (w.stats?.tijdMin || 0), 0) / 60
   );
 }
@@ -410,7 +411,7 @@ export function weekVolume(state: State, person: Person, weekKey: string): numbe
 export function weekLoad(state: State, person: Person, weekKey: string): number {
   const end = iso(addDays(fromIso(weekKey), 7));
   return doneWorkouts(state, person)
-    .filter((w) => w.date >= weekKey && w.date < end)
+    .filter((w) => w.date >= weekKey && w.date < end && !isStrength(w))
     .reduce((a, w) => a + (w.stats?.tijdMin || 0) * (w.stats?.rpe || 5), 0);
 }
 
@@ -505,4 +506,80 @@ export function summaryText(
   }
 
   return bits.join(' ');
+}
+
+/* ================= SOORT & STRUCTUUR ================= */
+
+export const catOf = (w: Pick<Workout, 'type'>): Discipline => TYPES[w.type]?.cat ?? 'kracht';
+
+export const isStrength = (w: Pick<Workout, 'type'>) => catOf(w) === 'kracht';
+
+/** De soort van een sessie; sessies van vóór oktober vallen terug op hun type. */
+export function kindOf(w: Pick<Workout, 'type' | 'kind'>): Kind {
+  return (w.kind as Kind) || DEFAULT_KIND[w.type] || 'easy';
+}
+
+/** "800 m", "1,2 km", "20 min", "45 s" voor het werkdeel van een blok. */
+export function fmtWork(b: Block): string {
+  if (b.workDistM) {
+    return b.workDistM >= 1000
+      ? fmtDec(b.workDistM / 1000, b.workDistM % 1000 ? 1 : 0) + ' km'
+      : `${Math.round(b.workDistM)} m`;
+  }
+  if (b.workDurS) return fmtDur(b.workDurS);
+  return '?';
+}
+
+/** Seconden → "20 min", "1:30", "45 s". */
+export function fmtDur(s: number): string {
+  if (s >= 600 && s % 60 === 0) return `${s / 60} min`;
+  if (s >= 60) return `${Math.floor(s / 60)}:${pad(Math.round(s % 60))}`;
+  return `${Math.round(s)} s`;
+}
+
+/** Gemiddelde van de gerealiseerde herhalingen van een blok, of null. */
+export function blockActualAvg(b: Block): number | null {
+  const v = (b.actual ?? []).filter((x): x is number => x != null && x > 0);
+  return v.length ? v.reduce((a, x) => a + x, 0) / v.length : null;
+}
+
+/** Kort, voor op het kaartje: "6×800 m · gem. 3:58 /km". */
+export function structureSummary(blocks: Block[] | null | undefined, type: string): string {
+  if (!blocks?.length) return '';
+  const parts = blocks.map((b) => {
+    const head = `${b.reps}×${fmtWork(b)}`;
+    const avg = blockActualAvg(b);
+    if (avg != null) return `${head} · gem. ${fmtSpeed(avg, type)}`;
+    if (b.speed != null) return `${head} @ ${fmtSpeed(b.speed, type)}`;
+    if (b.watts != null) return `${head} @ ${b.watts} W`;
+    return head;
+  });
+  return parts.join(' + ');
+}
+
+/** "800", "800m", "1,2 km", "1.2km" → meters. Kaal getal onder 50 = km. */
+export function parseDistM(str: string | null | undefined): number | null {
+  if (!str) return null;
+  const t = str.trim().toLowerCase().replace(',', '.');
+  const n = parseFloat(t);
+  if (isNaN(n) || n <= 0) return null;
+  if (t.endsWith('km')) return n * 1000;
+  if (t.endsWith('m')) return n;
+  return n < 50 ? n * 1000 : n;
+}
+
+/** "20", "20 min", "20:00", "1:30", "90 s" → seconden. Kaal getal = minuten. */
+export function parseDurS(str: string | null | undefined): number | null {
+  if (!str) return null;
+  const t = str.trim().toLowerCase().replace(',', '.');
+  if (t.includes(':')) {
+    const p = t.split(':').map(Number);
+    if (p.some(isNaN)) return null;
+    return p.length === 2 ? p[0] * 60 + p[1] : p[0] * 3600 + p[1] * 60 + p[2];
+  }
+  const n = parseFloat(t);
+  if (isNaN(n) || n <= 0) return null;
+  if (t.includes('min')) return n * 60;
+  if (/\d\s*(s|sec|seconden)$/.test(t)) return n;
+  return n * 60;
 }

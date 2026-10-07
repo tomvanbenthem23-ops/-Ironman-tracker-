@@ -9,7 +9,15 @@ import {
   useRef,
   useState
 } from 'react';
-import { emptyState, type GarminRec, type Person, type State, type Stats, type Workout } from './types';
+import {
+  emptyState,
+  type GarminRec,
+  type Person,
+  type PersonSettings,
+  type State,
+  type WeekKind,
+  type Workout
+} from './types';
 import { uid, weekKeyOf } from './calc';
 
 /**
@@ -24,6 +32,10 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'loaded' | 'error';
 
 type PendingWrite = { id: string; body: any };
 
+export type WorkoutPatch = Partial<
+  Pick<Workout, 'date' | 'stats' | 'kind' | 'structure' | 'wind' | 'plan'>
+>;
+
 type Ctx = {
   state: State;
   ready: boolean;
@@ -34,10 +46,12 @@ type Ctx = {
   /** Zolang dit aan staat overschrijft een achtergrondrefresh niets. */
   setEditing: (v: boolean) => void;
   addWorkout: (type: string, date: string, person?: Person) => string;
-  saveWorkout: (id: string, patch: { date?: string; stats?: Stats }) => void;
+  saveWorkout: (id: string, patch: WorkoutPatch) => void;
   deleteWorkout: (id: string) => void;
   bumpWeekly: (field: 'rek' | 'zuipen' | 'geneukt', weekKey: string, delta: number) => void;
   saveGarmin: (weekKey: string, rec: GarminRec) => void;
+  saveSettings: (patch: Partial<PersonSettings>) => void;
+  setWeekFlag: (weekKey: string, kind: WeekKind | null) => void;
   retry: () => void;
   refresh: () => void;
 };
@@ -179,12 +193,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const saveWorkout = useCallback(
-    (id: string, patch: { date?: string; stats?: Stats }) => {
+    (id: string, patch: WorkoutPatch) => {
       setState((s) => {
         const prev = s.workouts[id];
         if (!prev) return s;
         const next: Workout = {
           ...prev,
+          ...patch,
           date: patch.date ?? prev.date,
           stats: patch.stats ? { ...patch.stats } : prev.stats
         };
@@ -233,6 +248,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [person, push]
   );
 
+  const saveSettings = useCallback(
+    (patch: Partial<PersonSettings>) => {
+      setState((s) => {
+        const cur = s.settings[person] ?? {};
+        const next: PersonSettings = { ...cur, ...patch };
+        if ('z2Low' in patch || 'z2High' in patch) {
+          next.z2Source = next.z2Low == null && next.z2High == null ? null : 'manual';
+        }
+        return { ...s, settings: { ...s.settings, [person]: next } };
+      });
+      push({ settings: { person, ...patch } });
+    },
+    [person, push]
+  );
+
+  /** Weektype geldt voor jullie allebei: jullie trainen hetzelfde schema. */
+  const setWeekFlag = useCallback(
+    (weekKey: string, kind: WeekKind | null) => {
+      setState((s) => {
+        const flags = { ...s.weekFlags };
+        if (kind) flags[weekKey] = kind;
+        else delete flags[weekKey];
+        return { ...s, weekFlags: flags };
+      });
+      push({ weekFlag: { week: weekKey, kind } });
+    },
+    [push]
+  );
+
   const value = useMemo<Ctx>(
     () => ({
       state,
@@ -249,12 +293,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       deleteWorkout,
       bumpWeekly,
       saveGarmin,
+      saveSettings,
+      setWeekFlag,
       retry: () => void flush(),
       refresh: () => void load()
     }),
     [
       state, ready, saveState, pending, person, setPerson,
-      addWorkout, saveWorkout, deleteWorkout, bumpWeekly, saveGarmin, flush, load
+      addWorkout, saveWorkout, deleteWorkout, bumpWeekly, saveGarmin, saveSettings, setWeekFlag, flush, load
     ]
   );
 
@@ -273,6 +319,8 @@ function normalize(raw: any): State {
   s.workouts = s.workouts || {};
   s.weekly = s.weekly || {};
   s.garmin = s.garmin || {};
+  s.settings = s.settings || {};
+  s.weekFlags = s.weekFlags || {};
   for (const id of Object.keys(s.workouts)) {
     s.workouts[id].stats = s.workouts[id].stats || {};
   }

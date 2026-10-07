@@ -1,28 +1,35 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { MONTH_NAMES, NAMES, TYPES } from '@/lib/config';
+import { KINDS, MONTH_NAMES, NAMES, TYPES } from '@/lib/config';
 import {
   fmtPace,
   fmtSpeed,
   fmtTijd,
   fromIso,
+  kindOf,
   parseNum,
   parseSpeed,
   parseTijd,
   targetFor
 } from '@/lib/calc';
 import { useStore } from '@/lib/store';
-import type { Stats } from '@/lib/types';
+import type { Kind, Stats, Wind, WindDir } from '@/lib/types';
+import { BlockEditor, blocksToRows, rowsToBlocks, type BlockRow } from './block-editor';
+
+/** Soorten waarbij de opbouw (blokken) het belangrijkste deel van de training is. */
+const STRUCTURED: Kind[] = ['threshold', 'interval', 'tempo', 'sets'];
 
 /**
- * Invulscherm van één training.
+ * Invulscherm van één training. Kracht is alleen afvinken: die sessies worden
+ * niet met het horloge opgenomen, dus tijd, hartslag en RPE zeggen er niets.
  */
 export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void }) {
   const { state, saveWorkout, deleteWorkout, setEditing } = useStore();
   const w = state.workouts[id];
 
   const [done, setDone] = useState(false);
+  const [kind, setKind] = useState<Kind>('easy');
   const [tijd, setTijd] = useState('');
   const [gemHr, setGemHr] = useState('');
   const [maxHr, setMaxHr] = useState('');
@@ -31,6 +38,10 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
   const [hoogte, setHoogte] = useState('');
   const [vermogen, setVermogen] = useState('');
   const [rpe, setRpe] = useState(5);
+  const [rows, setRows] = useState<BlockRow[]>([]);
+  const [bft, setBft] = useState('');
+  const [windDir, setWindDir] = useState<WindDir | ''>('');
+  const [headKm, setHeadKm] = useState('');
   const [datum, setDatum] = useState('');
   const [confirmDel, setConfirmDel] = useState(false);
 
@@ -39,6 +50,7 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
     if (!w) return;
     const s = w.stats || {};
     setDone(!!s.done);
+    setKind(kindOf(w));
     setTijd(s.tijdMin ? fmtTijd(s.tijdMin) : '');
     setGemHr(s.gemHr != null ? String(s.gemHr) : '');
     setMaxHr(s.maxHr != null ? String(s.maxHr) : '');
@@ -53,6 +65,10 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
     setHoogte(s.hoogte != null ? String(s.hoogte) : '');
     setVermogen(s.vermogen != null ? String(s.vermogen) : '');
     setRpe(s.rpe ?? 5);
+    setRows(blocksToRows(w.structure, w.type));
+    setBft(w.wind?.bft != null ? String(w.wind.bft) : '');
+    setWindDir(w.wind?.dir ?? '');
+    setHeadKm(w.wind?.headKm != null ? String(w.wind.headKm) : '');
     setDatum(w.date);
     setConfirmDel(false);
   }, [id, w]);
@@ -84,8 +100,10 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
   if (!w || !t) return null;
 
   const isKracht = t.cat === 'kracht';
+  const fromGarmin = w.source === 'icu';
+  const autoWind = w.wind?.source === 'open-meteo';
   const d = fromIso(w.date);
-  const tgt = targetFor(state, w.person, w.type, w.date);
+  const tgt = isKracht ? null : targetFor(state, w.person, w.type, w.date);
 
   const speedLabel =
     t.cat === 'fiets'
@@ -96,20 +114,41 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
   const afstLabel = t.cat === 'zwem' ? 'Afstand (meter)' : 'Afstand (km)';
 
   function submit() {
+    if (isKracht) {
+      // oude waarden blijven in de database staan, alleen het vinkje telt
+      saveWorkout(id, { stats: { ...w!.stats, done }, date: datum || w!.date });
+      onClose();
+      return;
+    }
+
     const stats: Stats = {
       done,
       tijdMin: parseTijd(tijd),
       gemHr: parseNum(gemHr),
       maxHr: parseNum(maxHr),
-      rpe
+      rpe,
+      afstand: parseNum(afstand),
+      snelheid: parseSpeed(snelheid, w!.type)
     };
-    if (!isKracht) {
-      stats.afstand = parseNum(afstand);
-      stats.snelheid = parseSpeed(snelheid, w!.type);
-      if (t!.cat !== 'zwem') stats.hoogte = parseNum(hoogte);
-      if (t!.cat === 'fiets') stats.vermogen = parseNum(vermogen);
+    if (t!.cat !== 'zwem') stats.hoogte = parseNum(hoogte);
+    if (t!.cat === 'fiets') stats.vermogen = parseNum(vermogen);
+
+    let wind: Wind | null = w!.wind ?? null;
+    if (t!.cat === 'fiets' && !autoWind) {
+      const b = parseNum(bft);
+      wind =
+        b == null && !windDir
+          ? null
+          : { source: 'manual', bft: b, dir: windDir || null, headKm: parseNum(headKm) };
     }
-    saveWorkout(id, { stats, date: datum || w!.date });
+
+    saveWorkout(id, {
+      stats,
+      kind,
+      structure: rowsToBlocks(rows, w!.type),
+      wind,
+      date: datum || w!.date
+    });
     onClose();
   }
 
@@ -122,12 +161,13 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
         role="dialog"
         aria-modal="true"
         aria-label={`${t.label} invullen`}
-        className="max-h-[92vh] w-full max-w-[420px] overflow-auto rounded-im-card bg-white p-5"
+        className="max-h-[92vh] w-full max-w-[520px] overflow-auto rounded-im-card bg-white p-5"
       >
         <h3 className="text-[1.05rem] font-bold">
           {t.label}{' '}
           <span className="text-[.75rem] font-normal text-im-muted">
             {NAMES[w.person]} · {d.getDate()} {MONTH_NAMES[d.getMonth()]}
+            {fromGarmin && ' · ⌚ uit Garmin'}
           </span>
         </h3>
         {t.sub && <div className="mb-3 text-[.8rem] text-im-muted">{t.sub}</div>}
@@ -148,41 +188,68 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
           Training gedaan
         </label>
 
-        <Field label="Behaalde tijd (mm:ss of h:mm:ss)">
-          <input
-            value={tijd}
-            onChange={(e) => setTijd(e.target.value)}
-            inputMode="numeric"
-            placeholder="bv. 45:00"
-            className={INPUT}
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          <Field label="Gem. hartslag">
-            <input
-              value={gemHr}
-              onChange={(e) => setGemHr(e.target.value)}
-              type="number"
-              inputMode="numeric"
-              placeholder="bv. 150"
-              className={INPUT}
-            />
-          </Field>
-          <Field label="Max. hartslag">
-            <input
-              value={maxHr}
-              onChange={(e) => setMaxHr(e.target.value)}
-              type="number"
-              inputMode="numeric"
-              placeholder="bv. 178"
-              className={INPUT}
-            />
-          </Field>
-        </div>
-
         {!isKracht && (
           <>
+            <div className="mb-2.5">
+              <div className="mb-1 text-[.74rem] font-bold uppercase tracking-[.5px] text-im-muted">
+                Soort training
+              </div>
+              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Soort training">
+                {KINDS[t.cat].map((k) => (
+                  <button
+                    key={k.kind}
+                    role="radio"
+                    aria-checked={kind === k.kind}
+                    onClick={() => setKind(k.kind)}
+                    className={`rounded-full border px-3 py-1 text-[.8rem] font-semibold ${
+                      kind === k.kind
+                        ? 'border-im-ink bg-im-ink text-white'
+                        : 'border-im-line text-im-ink hover:border-im-ink'
+                    }`}
+                  >
+                    {k.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {(STRUCTURED.includes(kind) || rows.length > 0) && (
+              <BlockEditor rows={rows} onChange={setRows} type={w.type} />
+            )}
+
+            <Field label="Behaalde tijd (mm:ss of h:mm:ss)">
+              <input
+                value={tijd}
+                onChange={(e) => setTijd(e.target.value)}
+                inputMode="numeric"
+                placeholder="bv. 45:00"
+                className={INPUT}
+              />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <Field label="Gem. hartslag">
+                <input
+                  value={gemHr}
+                  onChange={(e) => setGemHr(e.target.value)}
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="bv. 150"
+                  className={INPUT}
+                />
+              </Field>
+              <Field label="Max. hartslag">
+                <input
+                  value={maxHr}
+                  onChange={(e) => setMaxHr(e.target.value)}
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="bv. 178"
+                  className={INPUT}
+                />
+              </Field>
+            </div>
+
             <div className="grid grid-cols-2 gap-2.5">
               <Field label={afstLabel}>
                 <input
@@ -233,19 +300,66 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
                 )}
               </div>
             )}
+
+            {t.cat === 'fiets' &&
+              (autoWind ? (
+                <div className="mb-2.5 rounded-im-ctl bg-[#f0f4f8] px-2.5 py-2 text-[.85rem]">
+                  💨 {w.wind?.bft != null && <>{w.wind.bft} Bft · </>}
+                  {w.wind?.headKm != null && <>{Math.round(w.wind.headKm)} km tegen · </>}
+                  {w.wind?.tailKm != null && <>{Math.round(w.wind.tailKm)} km mee</>}
+                  <span className="block text-[.72rem] text-im-muted">
+                    automatisch uit het weer tijdens je rit
+                  </span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2.5">
+                  <Field label="Wind (Bft)">
+                    <select value={bft} onChange={(e) => setBft(e.target.value)} className={INPUT}>
+                      <option value="">—</option>
+                      {Array.from({ length: 9 }, (_, i) => (
+                        <option key={i} value={i}>
+                          {i}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Vooral">
+                    <select
+                      value={windDir}
+                      onChange={(e) => setWindDir(e.target.value as WindDir | '')}
+                      className={INPUT}
+                    >
+                      <option value="">—</option>
+                      <option value="tegen">tegen</option>
+                      <option value="mee">mee</option>
+                      <option value="zij">zij</option>
+                      <option value="wisselend">wisselend</option>
+                    </select>
+                  </Field>
+                  <Field label="Km tegenwind">
+                    <input
+                      value={headKm}
+                      onChange={(e) => setHeadKm(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="bv. 20"
+                      className={INPUT}
+                    />
+                  </Field>
+                </div>
+              ))}
+
+            <Field label={`Hoe zwaar? ${rpe}/10`}>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                value={rpe}
+                onChange={(e) => setRpe(Number(e.target.value))}
+                className="w-full"
+              />
+            </Field>
           </>
         )}
-
-        <Field label={`Hoe zwaar? ${rpe}/10`}>
-          <input
-            type="range"
-            min={1}
-            max={10}
-            value={rpe}
-            onChange={(e) => setRpe(Number(e.target.value))}
-            className="w-full"
-          />
-        </Field>
 
         <Field label="Verplaatsen naar">
           <input

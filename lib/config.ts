@@ -1,4 +1,4 @@
-import type { Discipline, Person } from './types';
+import type { Discipline, Kind, Person } from './types';
 
 /**
  * Vaste configuratie — sectie 6 van IRONMAN_PROMPT.md.
@@ -90,3 +90,66 @@ export const DISCIPLINES: {
   { cat: 'fiets', emoji: '🚴', naam: 'Fietsen', color: '#bf9000' },
   { cat: 'zwem', emoji: '🏊', naam: 'Zwemmen', color: '#3d85c6' }
 ];
+
+/* ================= SOORT SESSIE ================= */
+
+/** Welke soorten er per discipline te kiezen zijn, met hun Nederlandse label. */
+export const KINDS: Record<Discipline, { kind: Kind; label: string }[]> = {
+  run: [
+    { kind: 'long', label: 'Long run (zone 2)' },
+    { kind: 'easy', label: 'Easy run' },
+    { kind: 'threshold', label: 'Threshold' },
+    { kind: 'interval', label: 'Interval' }
+  ],
+  fiets: [
+    { kind: 'endurance', label: 'Duurrit' },
+    { kind: 'tempo', label: 'Tempo / sweet spot' },
+    { kind: 'interval', label: 'Interval' }
+  ],
+  zwem: [
+    { kind: 'continuous', label: 'Doorzwemmen' },
+    { kind: 'sets', label: 'Sets (bv. 7 × 200 m)' }
+  ],
+  kracht: [{ kind: 'strength', label: 'Kracht' }]
+};
+
+/**
+ * Standaardsoort per type-sleutel. Een sessie zonder eigen `kind` (alles van
+ * vóór oktober) valt hierop terug. Korte runs zijn meestal interval, soms
+ * threshold — dat is in de modal om te zetten.
+ */
+export const DEFAULT_KIND: Record<string, Kind> = {
+  lange_run: 'long',
+  korte_run: 'interval',
+  lange_fiets: 'endurance',
+  korte_fiets: 'tempo',
+  zwem: 'sets',
+  core: 'strength',
+  upper: 'strength',
+  long_run: 'long',
+  interval_run: 'interval',
+  easy_run: 'easy',
+  bike60: 'tempo',
+  bike90: 'endurance',
+  bike150: 'endurance',
+  swim2000: 'continuous',
+  swim_int: 'sets',
+  legs_core: 'strength',
+  upper_body: 'strength',
+  full_body: 'strength'
+};
+
+export const KIND_SHORT: Record<Kind, string> = {
+  long: 'long',
+  easy: 'easy',
+  threshold: 'threshold',
+  interval: 'interval',
+  endurance: 'duur',
+  tempo: 'tempo',
+  continuous: 'doorzwemmen',
+  sets: 'sets',
+  strength: 'kracht'
+};
+
+/** Beaufort-schaal → gemiddelde windsnelheid in km/u (midden van de band). */
+export const BFT_KMH = [0, 3, 9, 15, 24, 34, 44, 56, 68, 82, 96, 110, 120];

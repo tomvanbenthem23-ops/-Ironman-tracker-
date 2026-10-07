@@ -8,6 +8,7 @@ import {
   boolean,
   doublePrecision,
   integer,
+  jsonb,
   timestamp,
   primaryKey
 } from 'drizzle-orm/pg-core';
@@ -36,6 +37,12 @@ export const workouts = pgTable('workouts', {
   hoogte: integer('hoogte'),
   vermogen: integer('vermogen'),
   rpe: integer('rpe'),
+  kind: text('kind'),
+  structure: jsonb('structure'),
+  plan: jsonb('plan'),
+  wind: jsonb('wind'),
+  source: text('source').notNull().default('manual'),
+  externalId: text('external_id'),
   updatedAt: timestamp('updated_at').notNull().defaultNow()
 });
 
@@ -65,13 +72,36 @@ export const garmin = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.person, t.week] }) })
 );
 
+export const personSettings = pgTable('person_settings', {
+  person: text('person').primaryKey(),
+  z2Low: integer('z2_low'),
+  z2High: integer('z2_high'),
+  maxHr: integer('max_hr'),
+  lthr: integer('lthr'),
+  ftp: integer('ftp'),
+  z2Source: text('z2_source'),
+  lastSync: timestamp('last_sync'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow()
+});
+
+export const weekFlags = pgTable('week_flags', {
+  week: text('week').primaryKey(), // maandag, YYYY-MM-DD
+  kind: text('kind').notNull(), // build | rest | taper | race
+  updatedAt: timestamp('updated_at').notNull().defaultNow()
+});
+
 export type SelectWorkout = typeof workouts.$inferSelect;
 export type SelectWeekly = typeof weekly.$inferSelect;
 export type SelectGarmin = typeof garmin.$inferSelect;
+export type SelectPersonSettings = typeof personSettings.$inferSelect;
 
 /**
- * Maakt de tabellen aan als ze nog niet bestaan.
- * Eenmalig aanroepen via GET /api/migrate na de eerste deploy.
+ * Maakt de tabellen aan en brengt ze op het huidige schema. Idempotent:
+ * aanroepen via GET /api/migrate na elke deploy die het schema uitbreidt.
+ *
+ * Wijzigingen zijn alleen toevoegend — er wordt nooit een kolom verwijderd of
+ * omgezet. Vóór de v2-uitbreiding wordt eenmalig een kopie van de bestaande
+ * tabellen gemaakt (`*_backup_20261007`).
  */
 export async function migrate() {
   await db.execute(sql`
@@ -114,4 +144,54 @@ export async function migrate() {
       updated_at timestamp NOT NULL DEFAULT now(),
       PRIMARY KEY (person, week)
     )`);
+
+  /* ---------- v2: kopie van de data vóór de uitbreiding ---------- */
+  await db.execute(
+    sql`CREATE TABLE IF NOT EXISTS workouts_backup_20261007 AS TABLE workouts`
+  );
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS weekly_backup_20261007 AS TABLE weekly`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS garmin_backup_20261007 AS TABLE garmin`);
+
+  /* ---------- v2: nieuwe kolommen en tabellen ---------- */
+  await db.execute(sql`ALTER TABLE workouts ADD COLUMN IF NOT EXISTS kind text`);
+  await db.execute(sql`ALTER TABLE workouts ADD COLUMN IF NOT EXISTS structure jsonb`);
+  await db.execute(sql`ALTER TABLE workouts ADD COLUMN IF NOT EXISTS plan jsonb`);
+  await db.execute(sql`ALTER TABLE workouts ADD COLUMN IF NOT EXISTS wind jsonb`);
+  await db.execute(
+    sql`ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual'`
+  );
+  await db.execute(sql`ALTER TABLE workouts ADD COLUMN IF NOT EXISTS external_id text`);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS workouts_external_id_idx
+      ON workouts (external_id) WHERE external_id IS NOT NULL`);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS person_settings (
+      person text PRIMARY KEY,
+      z2_low integer,
+      z2_high integer,
+      max_hr integer,
+      lthr integer,
+      ftp integer,
+      z2_source text,
+      last_sync timestamp,
+      updated_at timestamp NOT NULL DEFAULT now()
+    )`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS week_flags (
+      week text PRIMARY KEY,
+      kind text NOT NULL,
+      updated_at timestamp NOT NULL DEFAULT now()
+    )`);
+}
+
+/** Tellingen voor de controle na een migratie. */
+export async function counts() {
+  const rows = await db.execute(sql`
+    SELECT
+      (SELECT count(*) FROM workouts)::int AS workouts,
+      (SELECT count(*) FROM workouts_backup_20261007)::int AS workouts_backup,
+      (SELECT count(*) FROM weekly)::int AS weekly,
+      (SELECT count(*) FROM garmin)::int AS garmin`);
+  return (rows as any).rows?.[0] ?? (rows as any)[0];
 }
