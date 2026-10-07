@@ -8,10 +8,11 @@ There is no companion seed-data file: this app starts empty. Everything it needs
 
 ## 1. Project pitch
 
-Tom and Quirijn are training for the **Ironman 70.3 Valencia on Sunday 18 April 2027**, goal: **finish under 5 hours**. This is their shared training tracker, and it does two things:
+Tom and Quirijn are training for the **Ironman 70.3 Valencia on Sunday 18 April 2027**, goal: **finish under 5 hours**. This is their shared training tracker — from October onward it acts as their coach. It does three things:
 
-1. **Agenda** — a drag-and-drop training calendar running September 2026 through April 2027. They plan sessions from a palette of training types, then fill in what they actually achieved (time, distance, heart rate, RPE). From October onward, every endurance session carries a personal weekly pace target that ratchets from their own September baseline toward race pace.
-2. **Dashboard** — an analysis view that turns the logged sessions into a **predicted race finish time** with splits, per-discipline form and trends, training volume and consistency, a weekly Garmin check-in, and a written summary in Dutch telling them what to fix.
+1. **Agenda** — a drag-and-drop training calendar running September 2026 through April 2027. They plan sessions from a palette of training types; the tracker turns each planned session into a **prescription** (distance or duration, pace or heart-rate zone, and the interval structure), computed from their current fitness and building toward what sub-5 requires, with a 3:1 build/rest rhythm. Afterwards it judges whether the prescription was met.
+2. **Garmin sync** — via intervals.icu, completed activities (with laps/intervals, heart rate, wind) and wellness data (VO2max, resting HR, weight) flow in automatically, so nothing has to be typed in by hand. Manual entry remains for whoever is not connected.
+3. **Dashboard** — an honest **race-time prediction** (as if racing today, and projected to 18 April), built per leg from fitness markers that actually mean something, plus volume, consistency, the Garmin data and a written summary in Dutch.
 
 It is a private tool for exactly two people. It is not a general-purpose training app, has no social features, and does not need to support other races or other users.
 
@@ -39,11 +40,11 @@ Two orthogonal switchers, both always visible in the header:
 - Title `🏊🚴🏃 IRONMAN 70.3 VALENCIA` with the subline `Zondag 18 april 2027 · doel: onder de 5 uur`.
 - A **live countdown** to the race in four boxes: `dagen` / `uur` / `min` / `sec`, ticking every second, hours/minutes/seconds zero-padded. When the race moment has passed, the countdown is replaced by a single `🏁 RACE DAY` box.
 - The **panda counters** for both people side by side: `🐼 Tom: +3` / `🐼 Quirijn: −1` — always signed, both shown regardless of which person is selected.
-- Person tabs, view tabs, and the save-state indicator.
+- Person tabs, view tabs, the `🔄 Garmin` button (when anyone is connected) and the save-state indicator.
 
 **Context banner** — a single strip below the header, shown only in the Agenda view, whose content depends on the month being viewed (see section 7).
 
-**Agenda view** — two columns on desktop: a sticky training palette on the left (~215px) and the month calendar filling the rest. Below the palette sits a collapsible explainer `🎯 Hoe werken de targets?` containing the race-goal reference table from section 6.
+**Agenda view** — two columns on desktop: a sticky training palette on the left (~215px) and the month calendar filling the rest. Below the palette sits a collapsible explainer `🎯 Hoe werken de voorschriften?` (text in section 6).
 
 **Dashboard view** — a responsive card grid (cards ~300px minimum, auto-fitting), with the finish-time card spanning the full width at the top and the written analysis spanning the full width at the bottom.
 
@@ -51,7 +52,7 @@ Two orthogonal switchers, both always visible in the header:
 
 ## 5. Data model
 
-Three collections, all keyed by person. If the template offers a real database, model these as three tables (`workouts`, `weekly`, `garmin`) rather than one JSON blob; the shapes below are the contract every read and write goes through.
+Five collections. If the template offers a real database, model these as tables (`workouts`, `weekly`, `garmin`, `person_settings`, `week_flags`) rather than one JSON blob; the shapes below are the contract every read and write goes through. **Schema changes are additive only** — never drop or convert a column holding the users' data.
 
 ```json
 {
@@ -64,35 +65,46 @@ Three collections, all keyed by person. If the template offers a real database, 
       "type": "<training type key from section 6>",
       "date": "YYYY-MM-DD",
       "stats": {
-        "done": true,
-        "tijdMin": 45.5,
-        "gemHr": 150,
-        "maxHr": 178,
-        "afstand": 10,
-        "snelheid": 5.5,
-        "hoogte": 120,
-        "vermogen": 210,
-        "rpe": 7
-      }
+        "done": true, "tijdMin": 45.5, "gemHr": 150, "maxHr": 178, "afstand": 10,
+        "snelheid": 5.5, "hoogte": 120, "vermogen": 210, "rpe": 7
+      },
+      "kind": "long|easy|threshold|interval|endurance|tempo|continuous|sets|strength|null",
+      "structure": [
+        { "reps": 6, "workDistM": 800, "workDurS": null, "speed": 4.0, "watts": null,
+          "restDurS": 90, "restDistM": null, "actual": [4.01, 3.98, null], "actualHr": [168, 170, null] }
+      ],
+      "wind": { "source": "manual|auto", "bft": 4, "dir": "tegen|mee|zij|wisselend",
+                "speedKmh": 25, "fromDeg": 250, "headKm": 24, "tailKm": 21, "crossKm": 15 },
+      "source": "manual|icu",
+      "externalId": "<intervals.icu activity id or null>"
     }
   },
-  "weekly": { "<person>": { "<monday-ISO>": { "rek": 0, "zuipen": 0, "geneukt": 0 } } },
-  "garmin": { "<person>": { "<monday-ISO>": { "vo2": 50, "rhr": 52, "gewicht": 78.5 } } }
+  "weekly":   { "<person>": { "<monday-ISO>": { "rek": 0, "zuipen": 0, "geneukt": 0 } } },
+  "garmin":   { "<person>": { "<monday-ISO>": { "vo2": 50, "rhr": 52, "gewicht": 78.5 } } },
+  "settings": { "<person>": { "z2Low": 132, "z2High": 148, "maxHr": 192, "lthr": 172, "ftp": 240,
+                              "z2Source": "garmin|manual|null", "lastSync": "ISO-string|null" } },
+  "weekFlags": { "<monday-ISO>": "build|rest|taper|race" },
+  "integrations": { "tom": true, "quirijn": false }
 }
 ```
 
 Rules that must hold:
 
-- **Week keys are always the ISO date of that week's Monday.** Weeks run Monday–Sunday throughout the app (calendar rows, weekly counters, Garmin check-ins, targets, panda scoring).
+- **Week keys are always the ISO date of that week's Monday.** Weeks run Monday–Sunday throughout the app (calendar rows, weekly counters, Garmin wellness, week rhythm, panda scoring).
 - **Training type keys are stable identifiers and must never be renamed**, because stored workouts reference them.
-- `stats` fields are all optional and nullable. `done` is the checkbox "training gedaan"; everything else may be empty. `tijdMin` is **decimal minutes**. `afstand` is in km, except for swimming where it is in **metres**. `snelheid` is in the unit of its discipline (section 8). `hoogte` is elevation gain in metres and does not apply to swimming; `vermogen` is average watts and applies only to cycling. `rpe` is 1–10, default 5.
+- `stats` fields are all optional and nullable. `done` is the checkbox "training gedaan". `tijdMin` is **decimal minutes**. `afstand` is in km, except for swimming where it is in **metres**. `snelheid` is in the unit of its discipline (section 8). `hoogte` is elevation gain in metres (not for swimming); `vermogen` is average watts (cycling only, and only from a real power meter). `rpe` is 1–10.
+- `kind` may be null: a session without its own kind falls back to the default for its type (section 6). Every session from before October therefore reads correctly without migration.
+- `structure[].speed` and `actual[]` are in the discipline's unit (run min/km, swim min/100m, bike km/h). `actual` holds one value per repetition; `null` is a missed rep.
+- `externalId` is unique: it is how a second Garmin sync updates a session instead of duplicating it.
+- `weekFlags` holds **only** weeks that differ from the default rhythm (section 8.4). It is shared — both users train the same schedule.
+- `integrations` is computed by the server (does this person have an intervals.icu key configured) and never exposes the key.
 - **Missing collections default to empty objects** on load, so nothing downstream has to null-check them.
 
 ## 6. Training types & key dates — fixed configuration
 
 **Two schedule phases.** Phase 1 (September–December 2026) is the build-up with 7 training types. Phase 2 (January–April 2027) is the harder schedule with 11 types. The palette shows only the types belonging to the phase of the month currently being viewed. Both sets remain valid forever — a session logged in phase 1 keeps its type when viewed later.
 
-`goal` is the target value in race week. Run and swim goals are **paces in decimal minutes** (5.25 = 5:15); bike goals are **km/h**. Strength types have no goal and never show a target.
+The `goal` column is legacy (see the 5:00 split below). Paces are decimal minutes (5.25 = 5:15); bike values km/h.
 
 | key | label | sub-label | discipline | phase | fill | border | goal |
 |---|---|---|---|---|---|---|---|
@@ -115,9 +127,18 @@ Rules that must hold:
 | `upper_body` | Upper body session | — | kracht | 2 | `#b6d7a8` | `#6aa84f` | — |
 | `full_body` | Full body session | — | kracht | 2 | `#b6d7a8` | `#6aa84f` | — |
 
-**Per-discipline reference goal** (used to scale baselines, section 8): run `5.25`, fiets `33`, zwem `2.0`.
+**Session kinds.** Each discipline has kinds; a session's kind decides how it is read and prescribed. Default kind per type key (used whenever `kind` is null):
+
+| discipline | kinds (Dutch label) | default per type |
+|---|---|---|
+| run | `long` Long run (zone 2) · `easy` Easy run · `threshold` Threshold · `interval` Interval | `lange_run`/`long_run` → long, `korte_run`/`interval_run` → interval, `easy_run` → easy |
+| fiets | `endurance` Duurrit · `tempo` Tempo / sweet spot · `interval` Interval | `lange_fiets`/`bike90`/`bike150` → endurance, `korte_fiets`/`bike60` → tempo |
+| zwem | `continuous` Doorzwemmen · `sets` Sets | `zwem`/`swim_int` → sets, `swim2000` → continuous |
+| kracht | `strength` | all strength types |
 
 **Direction of "better"**: run and swim are paces — **lower is better**. Bike is a speed — **higher is better**.
+
+**How 5:00 splits over the legs** (`GOAL_SPLITS`, minutes): swim **37** (1:57 /100m), bike **153** (35.3 km/h), run **102** (4:50 /km), transitions **8** — exactly 300. The `goal` column above is legacy and no longer drives anything: those race-week goals summed to ±5:21, not sub-5. Derived requirements used by prescriptions and the dashboard: run threshold = 4:50 × 0.88 ≈ **4:15 /km**; swim CSS = 1:57 / (1.03 × 0.95) − 4 s ≈ **1:55 /100m**.
 
 **Key dates** (all local time, no timezone handling needed):
 
@@ -125,100 +146,102 @@ Rules that must hold:
 |---|---|---|
 | race moment | 18 April 2027, 08:00 | countdown target; that calendar day is styled as race day |
 | calendar range | September 2026 → April 2027 | exactly 8 months, navigation clamped to them |
-| `TARGET_FROM` | 1 October 2026 | no targets shown before this date |
-| `T0` | 5 October 2026 | first Monday of the target ramp |
-| `T1` | 12 April 2027 | Monday of race week; targets reach their goal here |
+| `BLOCK_START` | 5 October 2026 | Monday of build week 1; the 3:1 rhythm counts from here |
+| `TAPER_WEEK` | 5 April 2027 | taper week |
+| `RACE_WEEK` | 12 April 2027 | race week |
 | `PHASE2_FROM` | 1 January 2027 | palette switches to the phase-2 types |
 | `PANDA_START` | 31 August 2026 | Monday of the first week that counts for the panda score |
 
-**Race-goal reference text** for the collapsible explainer in the agenda sidebar (Dutch, shown verbatim to users):
+**Explainer text** for the collapsible `🎯 Hoe werken de voorschriften?` in the agenda sidebar (Dutch, shown verbatim):
 
-> September is de warm-up maand: alles wat jullie invullen wordt de baseline. Vanaf oktober krijgt elke duurtraining een target dat wekelijks opschuift van jullie eigen baseline naar het racedoel in de week van 12 april. Vanaf januari schakelt het palet om naar het zwaardere schema; de targets van de nieuwe varianten bouwen door op jullie niveau van dat moment.
+> Elke geplande training krijgt een voorschrift: afstand of duur, tempo of hartslag, en bij kwaliteitstrainingen de opbouw (bv. 6 × 800 m). Dat rekent de tracker uit jullie eigen trainingen van de laatste weken — drempeltempo, zone-2-tempo, duursnelheid op de fiets en zwem-CSS — en schuift het elke opbouwweek een stap op richting wat sub-5 vraagt.
 >
-> **Racedoelen voor sub-5u (raceweek):**
-> Long run → 5:15 /km · Interval run → 4:40 /km · Easy run → 5:45 /km
-> 60 min bike → 35 km/u · 90–120 min → 33 km/u · 150 min → 31 km/u
-> Swim 2000m → 2:00 /100m · Swim interval → 1:55 /100m
+> Long runs zijn altijd zone 2: daar is de hartslag het doel en het tempo alleen een verwachting. Elke vierde week is een rustweek (±35% minder); klik in de weekkolom om een week om te zetten.
 >
-> Op de dag zelf: ±38 min zwemmen, ±2u40 fietsen, ±1u50 lopen plus wissels.
+> **Sub-5 op de dag zelf:** zwemmen 0:37 (1:57 /100m) · fietsen 2:33 (35,3 km/u) · lopen 1:42 (4:50 /km) · wissels 0:08
 
 ## 7. Features per view
 
 ### Agenda
 
-**Training palette** (left column, sticky on desktop). Heading is `Trainingen — opbouw` in phase-1 months and `Trainingen — fase 2` in phase-2 months. One card per training type of the current phase, using that type's fill colour with a 5px left border in its border colour, label in bold and sub-label underneath. Cards are both draggable and tappable-to-select (see section 10). A selected card is visibly outlined. Below the palette: the hint text
+**Training palette** (left column, sticky). Heading is `Trainingen — opbouw` in phase-1 months and `Trainingen — fase 2` in phase-2 months. One card per training type of the current phase, using that type's fill colour with a 5px left border in its border colour, label in bold and sub-label underneath. Cards are both draggable and click-to-select (section 10). A selected card is visibly outlined. Below the palette the hint text
 
 > Sleep een training naar een dag, of klik hem aan en tik daarna op een dag. Klik op een geplande training om je tijden in te vullen. Slepen tussen dagen kan ook.
 
-and the collapsible `🎯 Hoe werken de targets?` block from section 6.
+and the collapsible `🎯 Hoe werken de voorschriften?` block from section 6.
 
 **Month navigation** — `‹ maand jaar ›` centred above the calendar, month name in Dutch, previous/next disabled at the ends of the 8-month range. Opens on the current month if it falls inside the range, otherwise the first month. Changing month clears any selected palette type.
 
 **Context banner**, depending on the month being viewed:
-- September 2026 → `🔥 Warm-up maand.` Vul bij elke training je tijden in — dit wordt jullie baseline. Vanaf oktober rollen hier persoonlijke targets uit die elke week iets scherper worden richting sub-5u.
-- Any month in 2027 → `💪 Fase 2 — het echte werk.` Het palet is opgeschroefd: langere ritten, interval in elke discipline. De targets bouwen gewoon door op jullie progressie sinds september.
-- October–December 2026 → `🎯 Target-fase.` Elke duurtraining toont je doeltempo voor die week, opgebouwd vanaf je september-baseline richting racetempo (week van 12 april). Groen = gehaald.
+- September 2026 → `🔥 Warm-up maand.` Vul bij elke training je tijden in — hieruit leest de tracker jullie startfitheid. Vanaf oktober krijgt elke training een voorschrift.
+- October–December 2026 → `🎯 Opbouw.` Elke training krijgt een voorschrift: hoe ver, hoe hard of in welke hartslag, en de opbouw — uit jullie huidige fitheid, richting wat sub-5 vraagt. Long runs altijd in zone 2. Elke vierde week is een rustweek. Na afloop: groene stip = gehaald.
+- Any month in 2027 → `💪 Fase 2 — het echte werk.` Het palet is opgeschroefd: langere ritten, interval in elke discipline. De voorschriften bouwen door op jullie fitheid van dat moment; vanaf 5 april begint de taper.
 
-Three visually distinct treatments: warm-up = amber, target = green, phase 2 = red.
+Three visually distinct treatments: warm-up = amber, build = green, phase 2 = red.
 
-**Comparison strip** — two cards, one per person (both always shown), scoped to the visible month: `<Naam> — 4/7 trainingen afgevinkt` plus a line of average speeds per discipline present that month (`Gemiddeld: 🏃 5:22/km · 🚴 31,4 km/u · 🏊 2:05/100m`), or `Nog geen tijden ingevuld deze maand`.
+**Comparison strip** — two cards, one per person (both always shown), scoped to the visible month: `<Naam> — 4/7 trainingen afgevinkt` plus average speeds per discipline present that month, or `Nog geen tijden ingevuld deze maand`.
 
-**Calendar** — a Monday-first month grid with columns `Ma Di Wo Do Vr Za Zo` plus a **`Week` column** on the right. Rows are whole weeks; days from adjacent months are shown faded. Today's cell is outlined in the accent colour. 18 April 2027 is rendered as a dark race-day cell containing `🏁 IRONMAN 70.3 VALENCIA`.
+**Calendar** — a Monday-first month grid with columns `Ma Di Wo Do Vr Za Zo` plus a **`Week` column**. Rows are whole weeks; days from adjacent months are faded. Today's cell is outlined in the accent colour. 18 April 2027 is a dark race-day cell containing `🏁 IRONMAN 70.3 VALENCIA`.
 
-Each day cell lists that person's sessions for that date as small cards showing: a `✅` prefix when done, the type label, then a meta line with achieved time, achieved speed/pace, and `RPE n` where filled in, and finally the week's target as `🎯 5:18 /km` coloured green/amber/red by whether it was hit (section 8). Clicking a session opens the modal.
+Each day cell lists that person's sessions as small cards:
+- **Not done yet**: the type label, the kind if it differs from the type's default, and the prescription summary, e.g. `🎯 14,5 km · ♥ ≤ 148`, `🎯 6×800 m @ 4:05 /km`, `🎯 2×12 min · ♥ 156–164`, `🎯 8×200 m @ 1:58 /100m`.
+- **Done**: `✅` + label, `⌚` if it came from Garmin, a coloured dot for the verdict (green hit / amber close / red miss, section 8.5), then time · speed · `♥ avgHR`, the structure summary (`6×800 m · gem. 3:58 /km`) and for rides the wind (`💨 4 Bft · 24 km tegen`).
+- **Strength**: only `✅` + label. Strength sessions are not recorded by the watch.
+Clicking a session opens the modal.
 
-**Week column** — per calendar row: the ISO week number (`wk 42`) and three counter rows, one per side activity, each with a `−` button, the current number, and a `+` button:
+**Week column** — per calendar row: the ISO week number (`wk 42`), a **week-kind button** (`opbouw` / `rustweek` / `taper` / `raceweek`, each its own colour; clicking cycles build → rest → taper, and returning to the default removes the override; a ✎ marks an override; not shown for September), and three counter rows, one per side activity, each with `−`, the number, `+`:
 - `🧘` → `rek`
 - `🍺` → `zuipen`
 - `🍆` → `geneukt`
 
-Counters never go below zero, and a row with a count above zero is visibly highlighted (green). These are per person and per week.
+Counters never go below zero; a row with a count above zero is highlighted green. Per person, per week.
 
-**Adding and moving sessions** — dragging a palette type onto a day creates a session there; dragging an existing session between days moves it; tapping a palette type then tapping a day also creates one (the tap path is not optional — see section 10). Creating a session opens its modal immediately so the user can log it in one flow.
+**Adding and moving sessions** — dragging a palette type onto a day creates a session there; dragging an existing session between days moves it; clicking a palette type then a day also creates one. Creating a session opens its modal immediately.
 
 ### Workout modal
 
-Header: the type label plus `<Naam> · 14 oktober`, with the type's sub-label beneath. If a target applies to this session, a highlighted line `🎯 Target deze week: **5:18 /km**`.
+Header: type label plus `<Naam> · 14 oktober` (and `· ⌚ uit Garmin` when synced), sub-label beneath.
+
+**Prescription panel** (non-strength): `🎯 <summary>` with the week kind on the right, the detail lines (warm-up, main set with rest, cool-down; for long runs the zone-2 range and the expected pace explicitly labelled as an expectation, not a goal), a warning line when something is missing (e.g. no zone 2 set, no threshold measurement yet), `Gebaseerd op: …` naming the sessions it rests on, and — once done — the verdict line (`✓ Gehaald` / `≈ Bijna` / `✗ Niet gehaald` with the notes). A button `📋 Voorschrift als opbouw overnemen` copies the prescribed blocks into the structure editor. The prescription follows the kind currently selected in the modal.
 
 Fields:
 - `Training gedaan` — checkbox.
-- `Behaalde tijd (mm:ss of h:mm:ss)` — free text; accepts `45:00`, `1:20:30` or a plain number of minutes.
-- `Gem. hartslag` and `Max. hartslag` — numbers, side by side.
-- For non-strength types: `Afstand (km)` — or `Afstand (meter)` for swimming — and the speed field, labelled `Snelheid (km/u)` for bike, `Tempo (min/100m, bv. 2:10)` for swim, `Tempo (min/km, bv. 5:30)` for run. The speed field is optional: leaving it empty is normal, and beneath it a live hint reads `berekend: 5:18 /km`, recomputed as the user types time and distance.
-- For non-swim types: `Hoogtemeters (m)`. For bike only: `Gem. vermogen (W)`. Both placeholder `Garmin`.
-- `Hoe zwaar? n/10` — a 1–10 slider showing its current value live.
+- **Strength types: nothing else** (date field and the buttons only). Values stored on older strength sessions stay in the database untouched.
+- `Soort training` — a radio group of the discipline's kinds.
+- `Opbouw` — block editor, shown for threshold/interval/tempo/sets or when blocks exist: per block `reps × work @ target, rust` (work is a distance like `800 m` or a duration like `20 min`; target is a pace, or for cycling km/h or watts like `210 W`), plus a free field for the realised value per rep (`4:01, 3:58, -`). `+ blok` adds a row, `✕` removes one.
+- `Behaalde tijd (mm:ss of h:mm:ss)`, `Gem. hartslag`, `Max. hartslag`, distance and speed/pace with the live `berekend: …` hint, `Hoogtemeters` (not swim), `Gem. vermogen (W)` (bike).
+- Bike only: wind — automatic summary when it came from Garmin (`💨 4 Bft · 24 km tegen · 21 km mee`), otherwise manual `Wind (Bft)`, `Vooral` (tegen / mee / zij / wisselend) and `Km tegenwind`.
+- `Hoe zwaar? n/10` slider.
+- `Verplaatsen naar` — date field (the no-drag way to move a session).
 
-Actions: `Sluit`, a delete button (`🗑`, with a confirmation), and `Opslaan`.
+Actions: `Sluit`, delete (`🗑` → `Zeker weten?`), `Opslaan`.
 
 ### Dashboard
 
-All cards are scoped to the currently selected person.
+All cards are scoped to the selected person.
 
-**Finish-time card** (full width, dark navy gradient, white text). Heading `Geschatte eindtijd — <Naam>` with `betrouwbaarheid: hoog|gemiddeld|laag` on the right. A very large `4:52` with `± 12 min · op basis van 37 afgeronde trainingen` beside it. Four split boxes: `🏊 1.9 km`, `🚴 90 km`, `🏃 21.1 km`, `🔁 Wissels`, each with its estimated time. Then a goal line: `Doel 5:00 →` followed by either `je zit er 0:08 onder. Vasthouden.` (green) or `nog 0:14 te winnen.` (red), plus, when behind, `Grootste winst zit in het <lopen|fietsen|zwemmen>.` naming the discipline furthest from its goal in relative terms.
+**Finish-time card** (full width, navy). Heading `Geschatte eindtijd — <Naam>`. Two large numbers side by side: `Als je vandaag racet` and `Projectie 18 april`, each `h:mm ± n min`. Next to them: `Onder de 5 uur. Vasthouden en niet blesseren.` or `Nog 0:14 te winnen. Grootste tekort: <onderdeel>.` Below, one box per leg (`🏊 1,9 km`, `🚴 90 km`, `🏃 21,1 km`): today's time and race pace, confidence, `18 apr <time> · 5:00 vraagt <split>` with the difference in minutes, and the method plus what it rests on. A leg without data shows `–:––` and what to do to get one. A fourth box shows the 8-minute transitions as a fixed assumption.
 
-When any discipline lacks data, the card instead shows `–:––` with `nog niet te berekenen` and: `Ik heb afgeronde trainingen met tijd + afstand nodig van elke discipline. Ontbreekt nog: **🏊 zwemmen, 🏃 lopen** (laatste 6 weken).`
+**Three discipline cards** showing fitness markers instead of session averages:
+- `🏃 Lopen` — `Drempeltempo` (with confidence, basis, and `sub-5: 4:15 /km`), `Tempo in zone 2`, `Long run (mediaan laatste 3)`, `Zone 2` range; sparkline of the threshold marker per week over the last 10 weeks (up = faster).
+- `🚴 Fietsen` — `Duursnelheid (windgecorrigeerd)` (with `race 35,3 km/u`), `FTP`; sparkline per week.
+- `🏊 Zwemmen` — `CSS` (with `sub-5: 1:55 /100m`); sparkline per week.
+Each card explains in one line where its marker comes from when there is no history yet.
 
-**Three discipline cards** — `🏃 Lopen`, `🚴 Fietsen`, `🏊 Zwemmen`. Each shows:
-- `Laatste 4 weken` — average speed over the last 28 days plus a trend marker versus the 28 days before that (`▲ 2,4% beter` green / `▼ 1,8% minder` red / `≈ gelijk` grey).
-- `Racedoel` — the discipline reference goal.
-- `Efficiëntie (snelheid/hartslag)` — with the same trend treatment.
-- `Sessies gelogd` — count of sessions with a usable speed.
-- A sparkline of the last 10 sessions, oriented so **up always means faster** (for paces, plot the negated value), captioned `verloop laatste N sessies (omhoog = sneller)`.
+**Volume & discipline card** — `Uren afgelopen week`, `Consistentie (afgevinkt van gepland)`, `Trainingsload-trend`, weekly-hours bars over the last 12 weeks, captioned `… zonder kracht`.
 
-Empty state: `Nog geen afgeronde <lopen>-trainingen met tijd en afstand.`
+**Garmin card** — `⌚ Garmin (automatisch)` for a connected person (`via intervals.icu · laatst opgehaald …`, values still overridable), otherwise `⌚ Garmin check-in (wekelijks)`. Inputs for the current week: `VO2max`, `Rust-HR`, `Gewicht`; VO2max sparkline once two values exist. Below: `Zone 2 (long runs)` with `Van`/`Tot` bpm and `FTP (W)`, labelled `uit je Garmin-zones` / `zelf ingevuld` / `nog niet ingesteld`. Editing zone 2 by hand marks it manual; the sync then leaves it alone.
 
-**Volume & discipline card** — `Uren afgelopen week`, `Consistentie (afgevinkt van gepland)` as a percentage, `Trainingsload-trend` as a trend marker, and a bar chart of training hours per week over the last 12 weeks, captioned `trainingsuren per week (laatste N weken)`.
+**Side-activities card** — `🧾 Neven-activiteiten (laatste N wkn)` with 12-week sums of 🧘/🍺/🍆 and `🐼 Panda counter` (signed).
 
-**Garmin check-in card** (`⌚ Garmin check-in (wekelijks)`) — three number inputs for the **current week**: `VO2max`, `Rust-HR`, `Gewicht` (kg, one decimal), saving on change. Once at least two VO2max values exist, a sparkline of the history beneath it, captioned `VO2max-verloop`; otherwise the hint `Vul dit wekelijks in vanaf je Garmin — VO2max en rust-HR zijn de beste onafhankelijke check op mijn schatting.`
+**Written analysis card** (full width, `🧠 Mijn analyse`), Dutch prose in this order:
+- No completed sessions → only: `Nog geen afgeronde trainingen. Zodra je trainingen afvinkt — of je Garmin ze binnenhaalt — begint hier de analyse.`
+- `<Naam> heeft **N training(en)** afgerond.` (singular for one)
+- Consistency: ≥85% / ≥65% / below — same three sentences as before.
+- Complete estimate: `Als je vandaag zou racen: **h:mm** (± n min). Met de huidige trend kom je op 18 april rond **h:mm**.` then either `Dat is onder de 5 uur — vasthouden en niet blesseren.` or `Voor sub-5 moet er nog h:mm af; het grootste tekort zit in het <onderdeel> (n min boven de 5:00-verdeling).` Incomplete: `Voor een eindtijd mis ik nog: <onderdeel> (<wat te doen>); …`
+- Volume <4 h or ≥9 h: the same two warnings as before.
 
-**Side-activities card** — `🧾 Neven-activiteiten (laatste N wkn)` with the 12-week sums: `🧘 Rekmomenten`, `🍺 Avondjes zuipen`, `🍆 Geneukt`, and `🐼 Panda counter` (signed).
-
-**Written analysis card** (full width, `🧠 Mijn analyse`) — generated Dutch prose, assembled from these rules, in this order:
-- No completed sessions at all → only: `Nog geen afgeronde trainingen. Zodra je trainingen afvinkt met tijd en afstand begint hier de analyse: vorm per discipline, trends, en een steeds nauwkeurigere eindtijdvoorspelling.`
-- Otherwise: `<Naam> heeft **N trainingen** afgerond.`
-- Consistency: ≥85% → `Consistentie is X% — sterk, dit is de belangrijkste voorspeller van je eindtijd.`; ≥65% → `Consistentie is X% — kan strakker; elke gemiste sessie kost meer dan een langzame sessie.`; below → `Consistentie is X% — hier zit je grootste probleem, niet in je tempo.`
-- With a full estimate: `Op huidige vorm kom je uit rond **4:52**.` followed by, if under 5 hours, `Dat is onder de 5 uur — de opdracht is nu vasthouden en niet blesseren.`, otherwise `Voor sub-5 moet er nog 0:14 af; de weektargets in de agenda zijn daarop berekend.` Without one: `Voor een eindtijdschatting mis ik nog recente afgeronde trainingen in minstens één discipline.`
-- Volume: last week between 0 and 4 hours → `Weekvolume (3,2u) is aan de lage kant voor een 70.3 — bouw richting 7–9u per week.`; 9 hours or more → `Let op: 9,4u in één week is fors. Herstel is ook training.`
+**Header** additionally shows, when anyone is connected, a `🔄 Garmin` button and the last sync message (`⌚ 3 nieuwe trainingen`, `⌚ bijgewerkt`, or `⚠️ Garmin: …`).
 
 ## 8. Business logic to preserve exactly
 
@@ -234,46 +257,85 @@ These are the failure-prone parts. Implement them precisely; they are deliberate
 - **The hours:minutes format used for the finish estimate and its splits must round the total number of minutes FIRST, then split into hours and minutes.** Rounding after splitting produced `5:60` for 359.7 minutes. This is a regression that has already happened once — include a test for it.
 - All numeric readouts use tabular figures so columns don't jitter.
 
-### 8.2 Weekly targets
+### 8.2 Sessions, kinds and structure
 
-Only types with a goal get targets, and only for dates on or after `TARGET_FROM` (1 Oct 2026).
+- **Kind**: `kindOf(w)` = `w.kind` if set, else the default for its type (section 6).
+- **Strength** sessions are check-only and **excluded from weekly volume and training load** — including older ones that still carry time/RPE.
+- **Block editor parsing**: a work value containing `min`, `:` or ending in `s` is a duration, otherwise a distance; a bare number under 50 is km, otherwise metres (`800` → 800 m, `2` → 2 km). Durations: `20` and `20 min` → 20 min, `1:30` → 90 s, `90 s` → 90 s. Rest may be prefixed with text (`rust 1:30`). Cycling targets ending in `W` are watts. Rows without reps or work are dropped. Converting blocks → rows → blocks must be lossless.
+- **Structure summary** on cards: `6×800 m · gem. 3:58 /km` when realised values exist (missed reps ignored), otherwise `2×20 min @ 4:24 /km`.
 
-1. **Baseline** for a person and a training type:
-   - The average derived speed of that person's September 2026 sessions **of that exact type**, if any exist.
-   - Otherwise (this is the normal case for every phase-2 type, which has no September history): the average of that person's September sessions **in the same discipline**, scaled by `type.goal / disciplineReferenceGoal`.
-   - If there is no September data in the discipline at all, there is no baseline and no target is shown.
-2. **Progress fraction** `f` = position of the session's **Monday** between `T0` (5 Oct 2026) and `T1` (12 Apr 2027), clamped to 0…1.
-3. **Target**:
-   - If the baseline is already at or better than the goal: keep improving by 4% across the full period — for paces `baseline × (1 − 0.04f)`, for bike speed `baseline × (1 + 0.04f)`.
-   - Otherwise linear interpolation: `baseline + (goal − baseline) × f`.
-4. **Colouring** of an achieved speed against its target: **hit** when at least as good as the target; **close** when within 5% the wrong side of it; **miss** beyond that. (For paces "at least as good" means lower; for bike speed, higher.)
+### 8.3 Fitness markers
 
-### 8.3 Finish-time estimate
+Computed per person **from completed sessions strictly before a reference date**. Prescriptions use the session's own date, so past prescriptions stay fixed while future ones move with fitness. Each marker carries its value, the number of sessions, the latest date, the sessions it rests on (for display) and a confidence: `hoog` (≥3 sessions, newest ≤21 days), `gemiddeld` (≥2, ≤35 days), else `laag`.
 
-Uses **completed sessions only** (`done` true, with a usable speed).
+- **Zone 2**: from settings; if absent but a max HR is known, 60–70% of max HR.
+- **Run threshold pace** (≈ one-hour race pace): from structured run blocks in the last 56 days, each block's average realised pace converted to one hour with **Riegel**: `pace × (60 / totalWorkMinutes)^0.06` — 2 × 20 min counts as 40 min, 6 × 800 m as ±19 min. Recency-weighted over the last four blocks. Without blocks: the fastest one-hour-equivalent of any run ≥ 20 min in the last 42 days, confidence `laag`. Easy runs are never the fastest, so they never drag it down.
+- **Run zone-2 pace**: long/easy runs in the last 42 days whose average HR was ≤ zone-2 top + 2, recency-weighted.
+- **Long-run length**: median of the last three long runs (42 days).
+- **Bike endurance speed**: endurance rides ≥ 45 min in the last 56 days, last six, recency-weighted, **wind-corrected**: `+ 0.25 × windKmh × (headShare − 0.7 × tailShare)` (headwind costs more than tailwind gives). Shares come from the km head/tail when known, else from the manual direction (tegen 0.7/0.2, mee 0.2/0.7, otherwise 0.4/0.4); wind speed from the ride or from the Beaufort midpoint. Without any wind data the confidence is capped at `gemiddeld`.
+- **FTP**: from settings (synced from intervals.icu or entered).
+- **Swim CSS**: realised pace of set reps of 100–400 m (last four blocks, 56 days); without sets, the average of whole sessions × 0.95 with confidence `laag`.
 
-**Recent form per discipline** = a weighted average over the **last 42 days**, where sessions are weighted by their position in that window (oldest = 1, next = 2, …) so recent sessions count more. Also record the number of sessions used, `n`.
+### 8.4 Week rhythm and prescriptions
 
-**Splits**, in minutes:
-- Swim: `pace × 0.97 × 19` — 1900 m, with a 3% wetsuit advantage.
-- Bike: `90 / (speed × 1.03) × 60` — 90 km, with a 3% race-day effect.
-- Run: `pace × 1.05 × 21.1` — 21.1 km, 5% slower than training pace because of the bike leg.
-- Transitions: a flat **8 minutes**.
+**Week kind**: from `BLOCK_START` (5 Oct 2026) weeks are numbered 0, 1, 2…; week index `% 4 === 3` is a **rest week** (26 Oct, 23 Nov, 21 Dec, 18 Jan, 15 Feb, 15 Mar), the week of 5 April is **taper**, the week of 12 April **race**, everything else **build**. `weekFlags` overrides. **Build step** = number of build weeks before this week; rest weeks do not advance it. **Progress** `f` = position of the session's Monday between BLOCK_START and RACE_WEEK, 0…1. Volume factor per week kind: build 1, rest 0.65, taper 0.6, race 0.4.
 
-**Total** is only computed when all three disciplines have recent data; otherwise the card names which are missing. **Margin** is ±4% of the total, rounded to whole minutes. **Confidence** comes from the smallest `n` across the three disciplines: ≥6 → `hoog`, ≥3 → `gemiddeld`, else `laag`.
+**Toward the goal**: `toward(current, required, f)` = `current + (required − current) × f`, clamped to **at most 3% better than current fitness** (pace or speed). Targets never run ahead of the athlete by more than that.
 
-The `Doel 5:00` comparison uses **300 minutes**. The "biggest gain" advice compares each discipline's recent form to its reference goal in relative terms (`(recent − goal) / goal` for paces, `(goal − recent) / goal` for bike speed) and names the largest positive gap.
+Per kind (ladders advance one level every two build steps; rest/taper weeks drop two levels; race week uses the first):
+- **Long run**: start = median long run at BLOCK_START, clamped 8–14 km; `km = min(cap, start + 0.5 × step)` with cap 16 km (phase 1) / 19 km (phase 2); never more than recent long-run median + 2 km; with no long run in 42 days, at most start + 1 km. Rest week × 0.7, taper ≤ 12, race week ≤ 6; rounded to 0.5 km, minimum 5. Goal = **HR within zone 2**; the zone-2 pace is shown only as an expectation.
+- **Easy run**: `min(10 | 12 in phase 2, 6 + 0.25 × step) × factor` km, zone 2.
+- **Threshold run**: 2×10 → 2×12 → 3×10 → 2×15 → 3×12 → 2×20 → 3×15 → 2×25 min at `toward(threshold, 4:15, f)`; rest 2 min (3 min for reps ≥ 15 min); 15 min warm-up, 10 min cool-down. Race week: race pace. No threshold yet → structure only, "op drempelgevoel", plus a hint.
+- **Interval run**: 6×800 → 8×800 → 5×1000 → 6×1000 → 5×1200 → 4×1600 m at threshold target × 0.94 (±5K pace); rest 1:30 (≤800 m) or 2:00.
+- **Bike endurance**: duration range per type (lange_fiets 90–150, korte_fiets 60–75, bike60 60, bike90 90–120, bike150 150–180 min); start from the recent median ride, +10 min per build step, × factor, rounded to 5. Intensity: 56–75% FTP when known, else bike zone 2 = run zone 2 − 7 bpm. Expected speed shown as "bij weinig wind".
+- **Bike tempo**: 2×10 → 3×10 → 2×15 → 3×12 → 2×20 → 3×15 min at 85–90% FTP, else HR zone-2 top + 8…16; indicative speed = `toward(endurance × 1.10, 35.3, f, 4%)`.
+- **Bike interval**: 5×4 → 6×4 → 5×5 → 4×6 min at 105% FTP (else HR > zone-2 top + 20), equal rest.
+- **Swim sets**: 6×200 → 8×200 → 5×300 → 4×400 → 3×500 → 2×800 m at `toward(CSS, 1:55, f) + 2 s`, rest 20 s (≤200 m) / 30 s; 300 m warm-up, 200 m cool-down.
+- **Swim continuous**: `min(2200, 1000 + 100 × step) × factor` m (≥ 800, rounded to 100) at CSS + 6 s.
+- **Strength**: no prescription.
 
-### 8.4 Trends and efficiency
+### 8.5 Did the session meet the prescription?
 
-- **Trend** compares the last 28 days against the 28 days before that, using plain (unweighted) averages. A relative difference under **0.5%** reads as `≈ gelijk`; otherwise `▲ X% beter` or `▼ X% minder` with one decimal, comma separator, where "better" respects the direction of the discipline.
-- **Efficiency** = speed per heartbeat: convert each session's speed to km/h (bike: as-is; run: `60 / pace`; swim: `6 / pace`), divide by average heart rate, average those, multiply by 100. Only sessions with a recorded average heart rate count. Higher is always better.
-- **Consistency** = completed ÷ planned, over all of that person's sessions dated from 1 September 2026 up to (not including) today.
-- **Training load** per week = `Σ (tijdMin × rpe)`, with RPE defaulting to 5 when missing; the card shows only its trend, last week vs. the week before.
-- **Weekly volume** = `Σ tijdMin / 60` of completed sessions in that week.
-- The dashboard's rolling window for weekly charts and side-activity sums is the **last 12 completed-or-current weeks** counted from `PANDA_START`.
+Only for done sessions. Each check yields hit / close / miss; the session's verdict is the worst of them:
+- **Volume**: distance (run km, swim m) or duration (bike endurance) ≥ 95% → hit, ≥ 85% → close.
+- **Heart rate** (long, easy, endurance): average HR ≤ zone-2 top + 2 → hit, + 7 → close, beyond → miss — so a long run at the right distance but too hard is a miss.
+- **Blocks**: average realised pace vs target — as good or better → hit, within 3% → close; fewer reps than prescribed: one short → close, more → miss.
+- Nothing measurable (only checked off) → hit with note "afgevinkt".
 
-### 8.5 Panda counter
+### 8.6 Finish-time model
+
+Per leg from the markers of 8.3 (reference date = tomorrow, so today's sessions count):
+- **Swim 1.9 km**: race pace = `(CSS + 4 s) × 1.03 × 0.95` (open-water sighting and chop; wetsuit — Valencia mid-April is 15–18 °C).
+- **Bike 90 km**: with FTP and a known weight: speed on flat ground at **76% FTP** (CdA 0.30, Crr 0.005, ρ 1.225, 3% drivetrain loss, bike 9 kg). Otherwise **wind-corrected endurance speed × 1.12** (race intensity ±8% above zone 2, plus closed roads, no stops, aero position, taper).
+- **Run 21.1 km**: `threshold ÷ 0.88` (70.3 runs sit at ±86–91% of threshold speed off the bike). Without a threshold marker: zone-2 pace × 0.90, confidence `laag`.
+- **Transitions**: 8 min.
+
+**Margin** = `sqrt(Σ (legTime × u)²)` with u = 3% / 6% / 10% for hoog / gemiddeld / laag. **Projection to 18 April**: per leg the change over the last six weeks (estimate now vs 42 days ago) per week, clamped to ±1%/week, **halved**, extended over the weeks left; the margin widens by 0.4% per week left. **Biggest gap** = the leg whose projected time exceeds its 5:00 split by the most minutes (> 0.5).
+
+This replaces the earlier model, which averaged all sessions of six weeks and therefore measured the training *mix* rather than fitness: more intervals looked "faster", a hard long run counted like an easy one, interval averages included the recovery jogs, and bike speed swung with the wind.
+
+### 8.7 Trends, consistency, volume
+
+- **Trend** markers: relative difference under 0.5% reads `≈ gelijk`; otherwise `▲ X% beter` / `▼ X% minder` (one decimal, comma), respecting the direction of the discipline.
+- **Consistency** = completed ÷ planned over all of that person's sessions from 1 September 2026 up to (not including) today.
+- **Training load** per week = `Σ (tijdMin × rpe)`, RPE defaulting to 5, strength excluded; the card shows only the trend.
+- **Weekly volume** = `Σ tijdMin / 60` of completed non-strength sessions.
+- Rolling window for weekly charts and side-activity sums: the last 12 weeks counted from `PANDA_START`.
+
+### 8.8 Garmin sync via intervals.icu
+
+Garmin offers no API to individuals; intervals.icu is an official Garmin Connect partner with a per-athlete API key (basic auth, user `API_KEY`). Per person two server-side env vars (`ICU_<PERSON>_API_KEY`, optional `ICU_<PERSON>_ATHLETE_ID`, default `0`). Strava is not used: its API terms forbid showing one athlete's data to anyone else, and intervals.icu returns Strava-sourced activities as empty stubs.
+
+- **When**: on app load if the last sync is older than 15 minutes, via the `🔄 Garmin` button, and once a day by cron (authorised by a `CRON_SECRET` bearer token instead of the login cookie). Window: from `lastSync − 3 days` (first time: 1 September 2026) to today.
+- **Activities**: run/trail/treadmill → run, (virtual/gravel/MTB) ride → fiets, (open-water) swim → zwem; anything else (including strength) is skipped, as are Strava stubs. Stats: `moving_time`/60, distance (m → km except swim), avg/max HR, elevation (not swim), average watts only if from a real power meter, RPE. Speed is left empty and derived.
+- **Intervals → structure**: only for activities not seen before. WORK intervals of similar length (±12% time or ±6% distance) in a row form one block; a block is expressed in distance or time, **whichever is rounder** (track reps have round distances, road threshold blocks round times); realised pace and HR per rep; rest = median recovery. One WORK interval covering more than 60% of the session means no structure.
+- **Kind inference**: ≥2 work reps → threshold (median rep ≥ 8 min) or interval; else long (≥12 km or ≥70 min) or easy; rides tempo/interval/endurance likewise; swims sets/continuous.
+- **Matching**: (1) same `externalId` → update (manual kind, structure and RPE kept); (2) else a session of the same person, date and discipline without `externalId` — planned or already entered by hand — preferring a matching kind and not-done; fill it, keeping its type and kind; (3) else create a new session with the palette type of that phase. Oldest activity first, each session claimed once.
+- **Wind**: intervals.icu provides per ride `average_wind_speed` (m/s), `prevailing_wind_deg`, `headwind_percent`, `tailwind_percent` → km head/tail/cross and Beaufort; none on the trainer.
+- **Wellness**: VO2max, resting HR, weight per day → one record per week (latest non-empty value per field); existing values are never overwritten with empty.
+- **Zones**: zone 2 from the run sport-settings `hr_zones` (upper bounds; zone 2 = zones[0]+1 … zones[1]) unless set manually; LTHR, max HR and FTP filled when empty.
+
+### 8.9 Panda counter
 
 Starting at the week of `PANDA_START` (Monday 31 August 2026), for every week that has **fully elapsed** (its Sunday is in the past) and is not after the race:
 
@@ -282,7 +344,7 @@ Starting at the week of `PANDA_START` (Monday 31 August 2026), for every week th
 
 The sum is the person's panda score, always displayed with an explicit sign. The three weekly counters themselves are just detail; only `geneukt` feeds the score.
 
-### 8.6 Week numbering
+### 8.10 Week numbering
 
 Week numbers shown in the calendar are ISO week numbers (Monday-based, the week containing the year's first Thursday is week 1).
 
@@ -307,7 +369,7 @@ Recreate this design system through whatever theming mechanism the template uses
 - Cards carry a soft shadow rather than a border; the dashed hairline between dashboard stat rows is `#e3e8ee`
 - Sparklines and bar charts are compact — full card width, ~40px tall, single-colour, no axes, no gridlines, no legend; a chart's meaning comes from its caption
 
-**Status colours** for target hit/close/miss map to good/warning/bad. Trend markers use good/bad/muted. Red is reserved for genuinely negative states — it is never used for the panda counter or the side activities, which are neutral.
+**Status colours** for the hit/close/miss verdict map to good/warning/bad; week kinds: build neutral, rest light blue, taper amber, race ink. Trend markers use good/bad/muted. Red is reserved for genuinely negative states — it is never used for the panda counter or the side activities, which are neutral.
 
 ## 10. Interaction & accessibility
 
@@ -322,19 +384,21 @@ This is a laptop app. It does not need a phone or tablet layout — see section 
 ## 11. Explicitly out of scope for v1
 
 - Per-user accounts, login, or roles — one shared password (or none) is fine.
-- Automatic Garmin/Strava import. The weekly check-in is typed in by hand on purpose.
-- Editing the training-type catalogue, goals or key dates from the UI — these are fixed configuration (section 6).
+- Strava as a data source (API terms forbid showing one athlete's data to the other) and Garmin's own API (not available to individuals).
+- Pushing prescribed workouts to the watch.
+- Editing the training-type catalogue, goals, key dates or the 5:00 split from the UI — fixed configuration (section 6).
 - Real-time collaboration beyond "last write wins".
 - Notifications, reminders, undo history, or edit history.
 - A phone or tablet layout. Both users log their sessions on a laptop.
-- Importing data from the previous HTML tracker. Older sessions are typed in by hand.
+- Importing data from the previous HTML tracker. Older sessions are typed in by hand or come in through the Garmin sync.
 - Support for other athletes, other races, or other distances.
 
 ## 12. Instructions to the coding assistant
 
 1. Build the views, features and business logic in sections 4–8 using whatever the chosen template's idiomatic approach is for routing, state, persistence and styling. Do **not** replicate the previous implementation's technology: it was one 53KB HTML file with no framework, no build step, hand-rolled inline SVG charts and `localStorage`-only persistence. Satisfy the *behavioural* requirements in section 2 with the template's own data layer — a real table structure is preferable to one JSON blob if the template offers a database, and the template's chart library is preferable to hand-written SVG.
 2. Treat section 6 as fixed configuration in code (a single module), not as user data, and section 8 as the specification for a small, separately testable calculation layer — pure functions over the data model in section 5, with no UI in them.
-3. Write tests for section 8 at minimum: the hours:minutes rounding case (359.7 minutes → `6:00`, never `5:60`), baseline scaling for a phase-2 type with no history of its own, target interpolation at `T0`/mid/`T1`, the already-better-than-goal 4% rule, hit/close/miss classification in both directions, the weighted 42-day recency average, and the panda counter across a part-elapsed week.
+3. Write tests for section 8 at minimum: the hours:minutes rounding case (359.7 minutes → `6:00`, never `5:60`); block parsing and lossless round-trip; strength excluded from volume; the rest weeks landing on 26 Oct, 23 Nov, 21 Dec, 18 Jan, 15 Feb, 15 Mar and overrides; build steps not advancing in rest weeks; the 3% cap in `toward`; long-run ladder, rest-week cut, recent + 2 km cap and the reset after a gap; threshold via Riegel; wind correction; each finish-time leg, the projection cap and margin widening; the intervals.icu mapping on fixture data (track 6 × 800 m in distance, road 2 × 20 min in time, matching without duplicates on a second sync, Strava stubs skipped, wellness never overwriting with empty, zone 2 from `hr_zones`); and the panda counter across a part-elapsed week.
 4. Apply the design system in section 9 through the template's native theming.
 5. Meet the interaction and accessibility expectations in section 10 — particularly the no-drag path for planning and moving sessions.
-6. Keep every piece of user-facing copy Dutch and informal, including empty states and error messages you have to invent, and keep the panda counter and side activities exactly as specified in section 2.
+6. Keep the intervals.icu key server-side only; the client learns just whether a person is connected.
+7. Keep every piece of user-facing copy Dutch and informal, including empty states and error messages you have to invent, and keep the panda counter and side activities exactly as specified in section 2.
