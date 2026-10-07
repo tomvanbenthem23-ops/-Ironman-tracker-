@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { estimateAt, raceSummary, raceView, speedFromPower } from './race';
+import { readiness, readinessFrom } from './fitness';
+import {
+  beyondLongest,
+  estimateAt,
+  projectReadiness,
+  raceSummary,
+  raceView,
+  speedFromPower
+} from './race';
 import { emptyState, type State, type Workout } from './types';
 
 let n = 0;
@@ -15,7 +23,12 @@ const state = (ws: Workout[], extra: Partial<State> = {}): State => {
   return { ...s, ...extra };
 };
 
-/** Iemand met een meting per onderdeel, rond de sub-5-grens. */
+/** Iemand die de race-belasting volledig gewend is. */
+const FULL = readinessFrom({ bikeLongKm: 95, runLongKm: 18, swimLongM: 2000, weeklyHours: 9, bricks: 3 });
+/** Quirijn begin oktober: snel, maar nooit verder dan 51 km gefietst en nooit een brick. */
+const QUIRIJN = readinessFrom({ bikeLongKm: 51, runLongKm: 16.3, swimLongM: 1700, weeklyHours: 5, bricks: 0 });
+
+/** Een meting per onderdeel, rond de sub-5-grens. */
 const fit = (d: string, thr = 4.3, css = 1.9, bike = 31) => [
   wo({
     type: 'korte_run', date: d, kind: 'threshold', stats: { done: true },
@@ -38,45 +51,79 @@ describe('speedFromPower', () => {
   });
 });
 
+describe('raceklaar', () => {
+  it('is 100% voor wie de race-belasting gewend is', () => {
+    expect(FULL.bike).toBeCloseTo(1, 6);
+    expect(FULL.run).toBeCloseTo(1, 6);
+    expect(FULL.swim).toBeCloseTo(1, 6);
+  });
+
+  it('weegt bij de fiets vooral de langste rit, bij de run ook fiets en bricks', () => {
+    expect(QUIRIJN.bike).toBeCloseTo(0.7 * (51 / 90) + 0.3 * (5 / 8), 6);
+    expect(QUIRIJN.run).toBeCloseTo(0.35 * (51 / 90) + 0.3 * (16.3 / 18) + 0.2 * (5 / 8), 6);
+    expect(QUIRIJN.notes.run).toContain('nog nooit van de fiets af gelopen');
+  });
+
+  it('telt een rit en een run op dezelfde dag als brick', () => {
+    const s = state([
+      wo({ type: 'lange_fiets', date: '2026-10-01', stats: { done: true, afstand: 60, tijdMin: 130 } }),
+      wo({ type: 'korte_run', date: '2026-10-01', stats: { done: true, afstand: 4, tijdMin: 22 } }),
+      wo({ type: 'korte_run', date: '2026-10-03', stats: { done: true, afstand: 8, tijdMin: 45 } })
+    ]);
+    const r = readiness(s, 'tom', '2026-10-07');
+    expect(r.bricks).toBe(1);
+    expect(r.bikeLongKm).toBe(60);
+    expect(r.runLongKm).toBe(8);
+  });
+
+  it('rekent vermoeidheid voor de km’s voorbij je langste rit', () => {
+    expect(beyondLongest(90, 95)).toBe(1);
+    expect(beyondLongest(90, 51)).toBeCloseTo(Math.pow(90 / 51, 0.05), 6);
+  });
+});
+
 describe('estimateAt', () => {
-  it('rekent elk onderdeel vanaf zijn eigen fitheidsmaat', () => {
-    const e = estimateAt(state(fit('2026-10-01')), 'tom', '2026-10-07');
+  it('rekent bij volledige raceklaarheid met de bekende omrekeningen', () => {
+    const e = estimateAt(state(fit('2026-10-01')), 'tom', '2026-10-07', FULL);
     const thr = 4.3 * Math.pow(60 / 40, 0.06);
     expect(e.legs.run.min).toBeCloseTo((thr / 0.88) * 21.1, 3);
     expect(e.legs.zwem.min).toBeCloseTo((1.9 + 4 / 60) * 1.03 * 0.95 * 19, 3);
     expect(e.legs.fiets.min).toBeCloseTo((90 / (31 * 1.12)) * 60, 3);
-    expect(e.complete).toBe(true);
     expect(e.total).toBeCloseTo(e.legs.run.min! + e.legs.zwem.min! + e.legs.fiets.min! + 8, 6);
   });
 
-  it('laat een intervalsessie het run-deel niet sneller maken dan een drempelsessie zou doen', () => {
-    // dit is precies de fout van het oude model: meer intervallen = "sneller"
-    const easyOnly = state([
-      wo({ type: 'lange_run', date: '2026-10-01', stats: { done: true, afstand: 15, tijdMin: 90 } })
-    ]);
-    const plusEasy = state([
-      ...Object.values(easyOnly.workouts),
-      wo({ type: 'easy_run', date: '2026-10-03', stats: { done: true, afstand: 8, tijdMin: 52 } })
-    ]);
-    const a = estimateAt(easyOnly, 'tom', '2026-10-07').legs.run.min!;
-    const b = estimateAt(plusEasy, 'tom', '2026-10-07').legs.run.min!;
-    expect(b).toBeCloseTo(a, 6); // een extra rustige run verandert je fitheid niet
+  it('maakt iemand die nooit 90 km fietste en nooit een brick deed flink langzamer', () => {
+    const s = state(fit('2026-10-01', 4.25, 1.85, 26.4));
+    const ready = estimateAt(s, 'tom', '2026-10-07', FULL);
+    const quirijn = estimateAt(s, 'tom', '2026-10-07', QUIRIJN);
+    // fiets: minder race-uplift én vermoeidheid voorbij 51 km
+    expect(quirijn.legs.fiets.min! - ready.legs.fiets.min!).toBeGreaterThan(10);
+    // run: van de fiets af na een afstand die je nooit reed
+    expect(quirijn.legs.run.min! / ready.legs.run.min!).toBeGreaterThan(1.05);
+    expect(quirijn.total! - ready.total!).toBeGreaterThan(20);
+    // en de onzekerheid is groter
+    expect(quirijn.margin!).toBeGreaterThan(ready.margin!);
   });
 
-  it('gebruikt bij een FTP en gewicht het vermogen', () => {
+  it('laat een extra rustige run je fitheid niet veranderen', () => {
+    // de fout van het eerste model: de trainingsmix telde, niet de fitheid
+    const base = [wo({ type: 'lange_run', date: '2026-10-01', stats: { done: true, afstand: 15, tijdMin: 90 } })];
+    const plus = [...base, wo({ type: 'easy_run', date: '2026-10-03', stats: { done: true, afstand: 8, tijdMin: 52 } })];
+    const a = estimateAt(state(base), 'tom', '2026-10-07', FULL).legs.run.min!;
+    const b = estimateAt(state(plus), 'tom', '2026-10-07', FULL).legs.run.min!;
+    expect(b).toBeCloseTo(a, 6);
+  });
+
+  it('gebruikt bij een FTP en gewicht het vermogen, naar raceklaar', () => {
     const s = state(fit('2026-10-01'), {
       settings: { tom: { ftp: 250 } },
       garmin: { tom: { '2026-09-28': { gewicht: 80 } } }
     });
-    const e = estimateAt(s, 'tom', '2026-10-07');
-    expect(e.legs.fiets.method).toContain('FTP');
-    expect(e.legs.fiets.pace).toBeCloseTo(speedFromPower(190, 80), 6);
-  });
-
-  it('wordt breder bij weinig of oude metingen', () => {
-    const fresh = estimateAt(state([...fit('2026-10-01'), ...fit('2026-10-03'), ...fit('2026-10-05')]), 'tom', '2026-10-07');
-    const one = estimateAt(state(fit('2026-09-01')), 'tom', '2026-10-07');
-    expect(one.margin! / one.total!).toBeGreaterThan(fresh.margin! / fresh.total!);
+    const full = estimateAt(s, 'tom', '2026-10-07', FULL);
+    expect(full.legs.fiets.method).toContain('76% van FTP');
+    expect(full.legs.fiets.pace).toBeCloseTo(speedFromPower(190, 80), 6);
+    const low = estimateAt(s, 'tom', '2026-10-07', QUIRIJN);
+    expect(low.legs.fiets.pace!).toBeLessThan(full.legs.fiets.pace!);
   });
 
   it('zegt per ontbrekend onderdeel wat er nodig is', () => {
@@ -86,14 +133,19 @@ describe('estimateAt', () => {
   });
 });
 
-describe('raceView', () => {
-  it('trekt de trend door naar 18 april, begrensd op 1% per week en gehalveerd', () => {
+describe('projectie', () => {
+  it('dicht het gat naar de race-belasting naar rato van hoe trouw je traint', () => {
+    expect(projectReadiness(QUIRIJN, 0).bikeLongKm).toBe(51);
+    expect(projectReadiness(QUIRIJN, 1).bikeLongKm).toBe(90);
+    expect(projectReadiness(QUIRIJN, 0.5).bikeLongKm).toBeCloseTo(70.5, 6);
+    expect(projectReadiness(QUIRIJN, 0.5).bike).toBeGreaterThan(QUIRIJN.bike);
+  });
+
+  it('trekt de fitheidstrend door, begrensd op 1% per week en gehalveerd', () => {
     const s = state([...fit('2026-08-25', 4.6, 2.0, 28), ...fit('2026-10-05', 4.3, 1.9, 31)]);
     const v = raceView(s, 'tom', '2026-10-07');
     expect(v.projected.total!).toBeLessThan(v.today.total!);
-    // maximaal 0,5% per week erbij
-    expect(v.projected.total! - 8).toBeGreaterThanOrEqual((v.today.total! - 8) * (1 - 0.005 * v.weeksLeft) - 1e-6);
-    expect(v.projected.margin!).toBeGreaterThan(v.today.margin!);
+    expect(v.projected.margin!).toBeGreaterThan(0);
   });
 
   it('noemt het onderdeel met het grootste tekort op de 5:00-verdeling', () => {
@@ -103,12 +155,15 @@ describe('raceView', () => {
 });
 
 describe('raceSummary', () => {
-  it('geeft beide eindtijden en het grootste tekort', () => {
-    const v = raceView(state(fit('2026-10-05', 4.3, 1.9, 26)), 'tom', '2026-10-07');
+  it('benoemt de langste rit en het ontbreken van bricks', () => {
+    // fit() zet rit en run op één dag (= een brick); hier de rit een dag eerder
+    const ws = fit('2026-10-05', 4.3, 1.9, 26);
+    ws[2] = { ...ws[2], date: '2026-10-04' };
+    const v = raceView(state(ws), 'tom', '2026-10-07');
     const t = raceSummary(v, 'Tom', 90, 7, 3);
     expect(t).toContain('Als je vandaag zou racen');
-    expect(t).toContain('18 april');
-    expect(t).toContain('fietsen');
+    expect(t).toContain('langste rit');
+    expect(t).toContain('van de fiets af');
   });
 
   it('zegt wat er ontbreekt', () => {

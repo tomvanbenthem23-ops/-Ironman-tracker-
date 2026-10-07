@@ -8,7 +8,8 @@ import {
   fmtPace,
   fromIso,
   iso,
-  kindOf
+  kindOf,
+  robustMax
 } from './calc';
 import type { Person, State, Workout } from './types';
 
@@ -170,18 +171,29 @@ export function runThreshold(state: State, person: Person, asOf: string): Anchor
 }
 
 /**
- * Hartslag op het omslagpunt (LTHR): uit de instellingen, anders 92% van de
- * max-HR, anders 92% van de hoogste hartslag in je runs van de laatste 90 dagen
- * (minstens drie runs met hartslag).
+ * Hoogste hartslag die je echt haalt: ingesteld, anders de middelste van je
+ * drie hoogste run-pieken van de laatste 90 dagen (één sensorpiek telt niet).
+ */
+export function maxHrOf(state: State, person: Person, asOf: string): number | null {
+  const s = state.settings[person] ?? {};
+  if (s.maxHr) return s.maxHr;
+  return robustMax(
+    window(state, person, asOf, 90)
+      .filter((w) => catOf(w) === 'run' && w.stats?.maxHr)
+      .map((w) => w.stats.maxHr!)
+  );
+}
+
+/**
+ * Hartslag op het omslagpunt (LTHR): uit de instellingen als die
+ * geloofwaardig is (onder de max), anders 90% van de max-HR. 90% is aan de
+ * voorzichtige kant: een te hoog omslagpunt maakt je drempeltempo te snel.
  */
 export function thresholdHr(state: State, person: Person, asOf: string): number | null {
   const s = state.settings[person] ?? {};
-  if (s.lthr) return s.lthr;
-  if (s.maxHr) return Math.round(s.maxHr * 0.92);
-  const maxes = window(state, person, asOf, 90)
-    .filter((w) => catOf(w) === 'run' && w.stats?.maxHr)
-    .map((w) => w.stats.maxHr!);
-  return maxes.length >= 3 ? Math.round(Math.max(...maxes) * 0.92) : null;
+  const max = maxHrOf(state, person, asOf);
+  if (s.lthr && (!max || s.lthr < max)) return s.lthr;
+  return max ? Math.round(max * 0.9) : null;
 }
 
 /** Rusthartslag: laatste Garmin-waarde, anders 55. */
@@ -195,8 +207,14 @@ export function restingHr(state: State, person: Person): number {
 /**
  * Drempeltempo uit gewone runs: snelheid schaalt grofweg lineair met de
  * hartslagreserve. Een run op 5:20 /km bij HR 154 met rust 55 en omslag 167
- * zegt: op het omslagpunt ±13% sneller, dus ±4:43 /km. Mediaan van de laatste
- * vijf runs van 20+ minuten; hooguit 35% sneller doortrekken.
+ * zegt: op het omslagpunt ±13% sneller, dus ±4:43 /km.
+ *
+ * Hoe verder je moet doortrekken, hoe onzekerder. Daarom:
+ * - alleen runs van 20+ minuten met minstens halve inspanning (hartslagreserve);
+ * - hooguit 25% sneller doortrekken;
+ * - gewogen gemiddelde waarin runs dicht bij het omslagpunt het zwaarst wegen
+ *   (gewicht = (fractie hartslagreserve)³): één harde run zegt meer dan vijf
+ *   rustige.
  */
 function runThresholdFromHr(state: State, person: Person, asOf: string): Anchor | null {
   const lthr = thresholdHr(state, person, asOf);
@@ -206,18 +224,20 @@ function runThresholdFromHr(state: State, person: Person, asOf: string): Anchor 
     .filter((w) => catOf(w) === 'run' && (w.stats?.tijdMin ?? 0) >= 20 && w.stats?.gemHr)
     .map((w) => {
       const pace = derivedSpeed(w);
-      const hr = w.stats.gemHr!;
-      if (!pace || hr <= rhr + 10 || hr >= lthr) return null;
-      const factor = Math.min(1.35, (lthr - rhr) / (hr - rhr));
-      return { v: pace / factor, d: w.date };
+      const hr = Math.min(w.stats.gemHr!, lthr);
+      const frac = (hr - rhr) / (lthr - rhr);
+      if (!pace || frac < 0.5) return null;
+      const factor = Math.min(1.25, 1 / frac);
+      return { v: pace / factor, d: w.date, w: frac ** 3 };
     })
-    .filter((x): x is { v: number; d: string } => !!x)
-    .slice(-5);
+    .filter((x): x is { v: number; d: string; w: number } => !!x)
+    .slice(-6);
   if (!xs.length) return null;
   const latest = xs[xs.length - 1].d;
   const conf = confidenceOf(xs.length, ageOf(latest, asOf));
+  const sw = xs.reduce((s, x) => s + x.w, 0);
   return {
-    value: median(xs.map((x) => x.v)),
+    value: xs.reduce((s, x) => s + x.v * x.w, 0) / sw,
     n: xs.length,
     latest,
     basis: [`${xs.length} run${xs.length === 1 ? '' : 's'} met hartslag, doorgetrokken naar omslag ${lthr}`],
@@ -385,6 +405,97 @@ export function css(state: State, person: Person, asOf: string): Anchor | null {
     basis: [`gemiddelde van ${whole.length} zwemsessie${whole.length === 1 ? '' : 's'} (zonder sets)`],
     confidence: 'laag'
   };
+}
+
+/* ================= raceklaar: kan je lichaam de afstand aan? ================= */
+
+/**
+ * Snelheid zegt nog niet of je 5 uur volhoudt. Wie nooit verder dan 50 km
+ * fietste of nooit van de fiets af ging lopen, haalt in de race niet het tempo
+ * dat zijn korte trainingen beloven. Dit meet hoeveel van de race-belasting je
+ * al gedaan hebt, over de laatste 8 weken:
+ *
+ * - langste rit tegenover 90 km;
+ * - langste run tegenover 18 km (meer hoeft niet voor een 70.3);
+ * - langste zwemsessie tegenover 1.900 m;
+ * - duurvolume: uren per week (zonder kracht) tegenover 8;
+ * - brick-trainingen: een rit en een run op dezelfde dag, tegenover 3.
+ *
+ * Per onderdeel een score van 0 tot 1. De fiets weegt vooral de langste rit;
+ * de run ook de fiets (90 km rijden is wat de run zwaar maakt) en de bricks.
+ */
+export type Readiness = {
+  bikeLongKm: number;
+  runLongKm: number;
+  swimLongM: number;
+  weeklyHours: number;
+  bricks: number;
+  bike: number;
+  run: number;
+  swim: number;
+  notes: { bike: string; run: string; swim: string };
+};
+
+const frac = (v: number, target: number) => Math.max(0, Math.min(1, v / target));
+
+export function readinessFrom(r: Pick<Readiness, 'bikeLongKm' | 'runLongKm' | 'swimLongM' | 'weeklyHours' | 'bricks'>): Readiness {
+  const bikeL = frac(r.bikeLongKm, 90);
+  const runL = frac(r.runLongKm, 18);
+  const vol = frac(r.weeklyHours, 8);
+  const brick = frac(r.bricks, 3);
+  const km = (v: number) => (v ? `${Math.round(v)} km` : 'nog niets');
+  return {
+    ...r,
+    bike: 0.7 * bikeL + 0.3 * vol,
+    run: 0.35 * bikeL + 0.3 * runL + 0.2 * vol + 0.15 * brick,
+    swim: frac(r.swimLongM, 1900),
+    notes: {
+      bike: `langste rit ${km(r.bikeLongKm)} (race 90 km) · ${fmtNum(r.weeklyHours)} u/week`,
+      run: `langste run ${km(r.runLongKm)} · ${r.bricks ? `${r.bricks} brick${r.bricks === 1 ? '' : 's'}` : 'nog nooit van de fiets af gelopen'}`,
+      swim: `langste zwemsessie ${Math.round(r.swimLongM)} m (race 1.900 m)`
+    }
+  };
+}
+
+const fmtNum = (v: number) => v.toFixed(1).replace('.', ',');
+
+export function readiness(state: State, person: Person, asOf: string): Readiness {
+  const ws = window(state, person, asOf, 56);
+  const dist = (cat: string) =>
+    Math.max(0, ...ws.filter((w) => catOf(w) === cat).map((w) => w.stats?.afstand ?? 0));
+  const recent = window(state, person, asOf, 28).filter((w) => catOf(w) !== 'kracht');
+  const hours = recent.reduce((s, w) => s + (w.stats?.tijdMin ?? 0), 0) / 60 / 4;
+  const days = new Map<string, Set<string>>();
+  for (const w of ws) {
+    const c = catOf(w);
+    if (c === 'run' || c === 'fiets') (days.get(w.date) ?? days.set(w.date, new Set()).get(w.date)!).add(c);
+  }
+  const bricks = Array.from(days.values()).filter((s) => s.has('run') && s.has('fiets')).length;
+  return readinessFrom({
+    bikeLongKm: dist('fiets'),
+    runLongKm: dist('run'),
+    swimLongM: dist('zwem'),
+    weeklyHours: hours,
+    bricks
+  });
+}
+
+/**
+ * Hoe trouw je traint: afgevinkt van gepland, maal hoe vaak je traint
+ * (duursessies per week over de laatste 4 weken tegenover 5). Bepaalt hoeveel
+ * van de opbouw de projectie naar 18 april mag aannemen.
+ */
+export function adherence(state: State, person: Person, asOf: string): number {
+  const recent = window(state, person, asOf, 28).filter((w) => catOf(w) !== 'kracht');
+  const planned = Object.values(state.workouts).filter(
+    (w) =>
+      w.person === person &&
+      catOf(w) !== 'kracht' &&
+      w.date < asOf &&
+      w.date >= iso(addDays(fromIso(asOf), -28))
+  );
+  const done = planned.length ? recent.length / planned.length : 0;
+  return Math.max(0, Math.min(1, done)) * frac(recent.length / 4, 5);
 }
 
 /* ================= alles samen, met cache ================= */

@@ -108,47 +108,76 @@ const median = (xs: number[]) => {
 const similar = (a: number, b: number, tol: number) =>
   Math.abs(a - b) <= tol * Math.max(a, b);
 
+/** Maximaal aantal blokken per training: daarboven wordt het onoverzichtelijk. */
+const MAX_BLOCKS = 2;
+
 /**
- * Werkintervallen → blokken. Opeenvolgende herhalingen van vergelijkbare
- * lengte (±12%) vormen één blok, bv. 6 × 800 m. Of een blok in afstand of in
+ * Werkintervallen → blokken, alleen voor échte intervaltrainingen.
+ *
+ * Een horloge maakt elke km (fiets: 5 km) een auto-lap, en intervals.icu geeft
+ * die als werkintervallen door — een gewone duurloop lijkt dan op 16 × 1000 m.
+ * Daarom telt een werkinterval alleen als herhaling als er een rustinterval
+ * direct voor of na zit: echte herhalingen hebben rust, auto-laps niet.
+ *
+ * Opeenvolgende herhalingen van vergelijkbare lengte (±12% tijd of ±6%
+ * afstand) vormen één blok. Losse herhalingen vallen weg, en alleen de
+ * grootste twee blokken (in werktijd) blijven over. Of een blok in afstand of
  * tijd staat hangt af van wat het rondst is: baanherhalingen hebben ronde
  * afstanden (800 m), drempelblokken op de weg ronde tijden (20 min).
- * Eén werkinterval dat bijna de hele training beslaat is gewoon een duurloop:
- * dan geen structuur.
  */
 export function intervalsToStructure(
   intervals: IcuInterval[],
   cat: Discipline,
-  totalMovingS?: number | null
+  _totalMovingS?: number | null
 ): Block[] | null {
-  const work = intervals.filter((i) => i.type === 'WORK' && (i.moving_time ?? 0) > 0);
-  if (!work.length) return null;
-  if (work.length === 1) {
-    const share = totalMovingS ? (work[0].moving_time ?? 0) / totalMovingS : 1;
-    if (share > 0.6) return null;
-  }
+  const minRest = cat === 'zwem' ? 8 : 20;
+  const isRest = (i: IcuInterval | undefined, work: IcuInterval) => {
+    if (!i || i.type !== 'RECOVERY') return false;
+    if ((i.elapsed_time ?? i.moving_time ?? 0) < minRest) return false;
+    // rust moet ook echt rustiger zijn dan het werk (bij zwemmen: stilstaan aan de kant)
+    if (i.average_speed && work.average_speed) return i.average_speed < work.average_speed * 0.9;
+    return true;
+  };
 
-  // groeperen op opeenvolgende, vergelijkbare herhalingen
+  // groeperen: herhalingen met rust, aaneengesloten door alleen rustintervallen
   const groups: IcuInterval[][] = [];
-  for (const iv of work) {
-    const g = groups[groups.length - 1];
-    const ref = g?.[0];
+  let current: IcuInterval[] | null = null;
+  intervals.forEach((iv, idx) => {
+    if (iv.type !== 'WORK' || !(iv.moving_time ?? 0)) {
+      if (iv.type !== 'RECOVERY') current = null;
+      return;
+    }
+    const real = isRest(intervals[idx - 1], iv) || isRest(intervals[idx + 1], iv);
+    if (!real) {
+      current = null;
+      return;
+    }
+    const ref = current?.[0];
     const same =
       ref &&
       (similar(ref.moving_time ?? 0, iv.moving_time ?? 0, 0.12) ||
         (!!ref.distance && !!iv.distance && similar(ref.distance, iv.distance, 0.06)));
-    if (same) g.push(iv);
-    else groups.push([iv]);
-  }
+    if (current && same) current.push(iv);
+    else groups.push((current = [iv]));
+  });
+
+  const kept = groups
+    .filter((g) => g.length >= 2 && (cat !== 'zwem' || median(g.map((i) => i.distance ?? 0)) >= 50))
+    .map((g, order) => ({ g, order, work: g.reduce((s, i) => s + (i.moving_time ?? 0), 0) }))
+    .sort((a, b) => b.work - a.work)
+    .slice(0, MAX_BLOCKS)
+    .sort((a, b) => a.order - b.order)
+    .map((x) => x.g);
+  if (!kept.length) return null;
 
   // rust = mediane herstelduur tussen de werkblokken
   const rests = intervals
     .filter((i) => i.type === 'RECOVERY')
     .map((i) => i.elapsed_time ?? i.moving_time ?? 0)
-    .filter((s) => s > 0);
+    .filter((s) => s >= minRest);
   const restDurS = rests.length ? Math.round(median(rests)) : null;
 
-  return groups.map((g) => {
+  return kept.map((g) => {
     const dists = g.map((i) => i.distance ?? 0);
     const durs = g.map((i) => i.moving_time ?? 0);
     const md = median(dists);
@@ -282,6 +311,9 @@ export function activityWind(act: IcuActivity): Wind | null {
 
 /* ================= koppelen aan de planning ================= */
 
+/** Gelijkmatige trainingen: daar hoort geen opbouw bij, hoe veel rondes het horloge ook maakte. */
+const STEADY: Kind[] = ['long', 'easy', 'endurance', 'continuous'];
+
 export type SyncResult = {
   upserts: Workout[];
   created: number;
@@ -329,11 +361,17 @@ export function matchActivities(
     const prior = byExt.get(extId);
     if (prior) {
       claimed.add(prior.id);
+      const k = prior.kind ?? kind;
       out.upserts.push({
         ...prior,
         stats: { ...stats, rpe: prior.stats.rpe ?? stats.rpe },
-        kind: prior.kind ?? kind,
-        structure: structure ?? prior.structure ?? null,
+        kind: k,
+        // zonder verse intervallen (gewone sync) blijft de opbouw staan
+        structure: STEADY.includes(k)
+          ? null
+          : intervals
+            ? structure
+            : (prior.structure ?? null),
         wind: wind ?? prior.wind ?? null,
         source: 'icu',
         externalId: extId
@@ -362,7 +400,7 @@ export function matchActivities(
         // RPE is jullie eigen gevoel: een handmatige waarde blijft staan
         stats: { ...stats, rpe: target.stats?.rpe ?? stats.rpe },
         kind: target.kind ?? null,
-        structure: structure ?? target.structure ?? null,
+        structure: STEADY.includes(kindOf(target)) ? null : (structure ?? target.structure ?? null),
         wind: wind ?? target.wind ?? null,
         source: 'icu',
         externalId: extId
@@ -378,7 +416,7 @@ export function matchActivities(
       date,
       stats,
       kind,
-      structure,
+      structure: STEADY.includes(kind) ? null : structure,
       wind,
       source: 'icu',
       externalId: extId
@@ -418,18 +456,41 @@ export function wellnessToWeeks(
 }
 
 /**
- * Zone 2 uit de hardloopzones van Garmin/intervals.icu. `hr_zones` zijn
- * bovengrenzen: zone 1 loopt t/m zones[0], zone 2 van zones[0]+1 t/m zones[1].
+ * Zone 2 uit de hardloopzones van intervals.icu. `hr_zones` zijn bovengrenzen:
+ * zone 1 loopt t/m zones[0], zone 2 van zones[0]+1 t/m zones[1].
+ *
+ * Een nieuw intervals.icu-account staat op standaardwaarden (max 220, omslag
+ * 200, FTP 250) die niets met de sporter te maken hebben. Die herkennen we en
+ * nemen we niet over:
+ * - hartslag: alleen als max-HR geloofwaardig is tegenover de hoogste hartslag
+ *   die je werkelijk haalde (hooguit 25 erboven) en het omslagpunt eronder ligt;
+ * - FTP: alleen als je echt met een wattmeter rijdt.
  */
-export function zonesFromSettings(list: IcuSportSettings[]) {
+export function zonesFromSettings(
+  list: IcuSportSettings[],
+  observedMaxHr: number | null = null,
+  hasPower = false
+) {
   const run = list.find((s) => s.types?.includes('Run'));
   const ride = list.find((s) => s.types?.includes('Ride'));
   const z = run?.hr_zones;
+  const max = run?.max_hr ?? null;
+  const lthr = run?.lthr ?? null;
+  const hrValid =
+    !!max &&
+    !!lthr &&
+    lthr < max &&
+    lthr >= max * 0.75 &&
+    (observedMaxHr == null || max <= observedMaxHr + 25);
+  const zonesValid = hrValid && !!z && z.length >= 2 && z[1] < lthr!;
   return {
-    z2Low: z && z.length >= 2 ? z[0] + 1 : null,
-    z2High: z && z.length >= 2 ? z[1] : null,
-    lthr: run?.lthr ?? null,
-    maxHr: run?.max_hr ?? null,
-    ftp: ride?.ftp ?? null
+    hrValid,
+    z2Low: zonesValid ? z![0] + 1 : null,
+    z2High: zonesValid ? z![1] : null,
+    lthr: hrValid ? lthr : null,
+    maxHr: hrValid ? max : null,
+    ftp: hasPower ? (ride?.ftp ?? null) : null,
+    /** De ruwe waarden, om eerder overgenomen standaardwaarden te kunnen opruimen. */
+    raw: { maxHr: max, lthr, ftp: ride?.ftp ?? null }
   };
 }

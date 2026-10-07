@@ -100,7 +100,11 @@ function Hero({ view, naam }: { view: ReturnType<typeof raceView>; naam: string 
 
       <div className="flex flex-wrap gap-x-10 gap-y-3">
         <Big label="Als je vandaag racet" est={today} />
-        <Big label="Projectie 18 april" est={projected} />
+        <Big
+          label="Projectie 18 april"
+          est={projected}
+          sub={`als je blijft trainen zoals de laatste 4 weken (${Math.round(view.adherence * 100)}% trouw)`}
+        />
         <div className="self-end pb-1 text-[.85rem]">
           {projected.complete ? (
             projected.total! <= 300 ? (
@@ -149,10 +153,11 @@ function Hero({ view, naam }: { view: ReturnType<typeof raceView>; naam: string 
   );
 }
 
-function Big({ label, est }: { label: string; est: Estimate }) {
+function Big({ label, est, sub }: { label: string; est: Estimate; sub?: string }) {
   return (
     <div>
       <div className="text-[.72rem] uppercase tracking-[1px] text-im-navy-soft">{label}</div>
+      {sub && <div className="text-[.68rem] text-im-navy-soft">{sub}</div>}
       <div className="text-[2.4rem] font-extrabold leading-tight tabular-nums">
         {est.complete ? fmtHM(est.total!) : '–:––'}
         {est.complete && (
@@ -202,6 +207,13 @@ function LegBox({
                 {Math.round(Math.abs(over))} min)
               </span>
             )}
+          </span>
+          <span className="mt-1.5 block text-[.72rem]">
+            Raceklaar{' '}
+            <b className={leg.ready >= 0.75 ? 'text-im-on-navy-good' : 'text-im-on-navy-bad'}>
+              {Math.round(leg.ready * 100)}%
+            </b>
+            <span className="block text-[.68rem] text-im-navy-soft">{leg.readyNote}</span>
           </span>
           <span
             className="mt-1 block text-[.68rem] leading-snug text-im-navy-soft"
@@ -428,16 +440,21 @@ function GarminCard() {
 
       <div className="mt-3 border-t border-dashed border-im-hairline pt-2.5">
         <div className="mb-1 flex items-baseline justify-between text-[.72rem] uppercase tracking-[.5px] text-im-muted">
-          <span>Zone 2 (long runs)</span>
+          <span>Max-HR en zone 2</span>
           <span className="normal-case tracking-normal">
             {ps.z2Source === 'garmin'
-              ? 'uit je Garmin-zones'
+              ? 'zone 2 uit je Garmin-zones'
               : ps.z2Source === 'manual'
-                ? 'zelf ingevuld'
-                : 'nog niet ingesteld'}
+                ? 'zone 2 zelf ingevuld'
+                : ps.maxHr
+                  ? `zone 2 = 60–70% van max: ${Math.round(ps.maxHr * 0.6)}–${Math.round(ps.maxHr * 0.7)}`
+                  : 'nog niet ingesteld'}
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
+          <GarminInput label="Max-HR" value={ps.maxHr} placeholder="bv. 195"
+            onCommit={(v) => num(v) !== (ps.maxHr ?? null) && saveSettings({ maxHr: num(v) })}
+            onFocus={setEditing} />
           <GarminInput label="Van (bpm)" value={ps.z2Low} placeholder="bv. 130"
             onCommit={(v) => num(v) !== (ps.z2Low ?? null) && saveSettings({ z2Low: num(v), z2High: ps.z2High ?? null })}
             onFocus={setEditing} />

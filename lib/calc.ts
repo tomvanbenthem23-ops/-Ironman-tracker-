@@ -327,3 +327,13 @@ export function parseDurS(str: string | null | undefined): number | null {
   if (/\d\s*(s|sec|seconden)$/.test(t)) return n;
   return n * 60;
 }
+
+/**
+ * Hoogste waarde zonder uitschieters: de middelste van de drie hoogste.
+ * Een polssensor meet soms één piek (207 bpm) die er niet was; die mag geen
+ * omslagpunt of zones bepalen. Minder dan drie waarden: null.
+ */
+export function robustMax(xs: number[]): number | null {
+  const top = xs.filter((x) => x > 0).sort((a, b) => b - a).slice(0, 3);
+  return top.length === 3 ? top[1] : null;
+}

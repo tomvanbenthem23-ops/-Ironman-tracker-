@@ -127,6 +127,33 @@ describe('intervalsToStructure', () => {
     expect(b.actual![0]).toBeCloseTo(4.39, 2);
   });
 
+  it('ziet auto-laps niet als intervallen: 16 aaneengesloten km is gewoon een long run', () => {
+    const laps: IcuInterval[] = Array.from({ length: 16 }, () => ({
+      type: 'WORK', distance: 1000, moving_time: 360, average_speed: ms(6)
+    }));
+    expect(intervalsToStructure(laps, 'run', 5800)).toBeNull();
+    // fiets: 5-km-laps idem
+    const ride: IcuInterval[] = Array.from({ length: 6 }, () => ({
+      type: 'WORK', distance: 5000, moving_time: 660, average_speed: 7.5
+    }));
+    expect(intervalsToStructure(ride, 'fiets', 4000)).toBeNull();
+  });
+
+  it('laat losse rondes weg en houdt hooguit twee blokken', () => {
+    const w = (d: number, p: number): IcuInterval => ({
+      type: 'WORK', distance: d, moving_time: Math.round((d / 1000) * p * 60), average_speed: ms(p)
+    });
+    const mixed: IcuInterval[] = [
+      w(1000, 5.5), rec(60), // losse inloop-ronde met rust: één herhaling, valt weg
+      w(400, 3.8), rec(90), w(400, 3.8), rec(90), w(400, 3.8), rec(90),
+      w(1000, 4.1), rec(90), w(1000, 4.1), rec(90), w(1000, 4.1), rec(90), w(1000, 4.1), rec(90),
+      w(200, 3.5), rec(60), w(200, 3.5), rec(60)
+    ];
+    const s = intervalsToStructure(mixed, 'run', 3000)!;
+    expect(s).toHaveLength(2);
+    expect(s.map((b) => `${b.reps}×${b.workDistM}`)).toEqual(['3×400', '4×1000']);
+  });
+
   it('ziet één werkinterval over bijna de hele run als duurloop', () => {
     const one = [{ type: 'WORK', distance: 16000, moving_time: 5600, average_speed: ms(5.8) }];
     expect(intervalsToStructure(one, 'run', 5800)).toBeNull();
@@ -278,6 +305,27 @@ describe('matchActivities', () => {
     expect(byExt.x2).toBe('p2'); // interval → korte_run
   });
 
+  it('geeft een long run of duurrit nooit een opbouw, ook niet met rondes en pauzes', () => {
+    const pausey: IcuInterval[] = [
+      { type: 'WORK', distance: 5000, moving_time: 1700, average_speed: ms(5.7) }, rec(120),
+      { type: 'WORK', distance: 5000, moving_time: 1700, average_speed: ms(5.7) }, rec(120),
+      { type: 'WORK', distance: 5000, moving_time: 1700, average_speed: ms(5.7) }
+    ];
+    const r = matchActivities('tom', [planned({ type: 'lange_run' })], [
+      { act: run({ id: 'p', distance: 15000, moving_time: 5100 }), intervals: pausey }
+    ]);
+    expect(r.upserts[0].structure).toBeNull();
+  });
+
+  it('ruimt bij opnieuw opbouwen de oude opbouw van een gesyncte duurloop op', () => {
+    const junk = planned({
+      id: 'old', type: 'lange_run', externalId: 'a9', source: 'icu', stats: { done: true },
+      structure: [{ reps: 16, workDistM: 1000 }]
+    });
+    const r = matchActivities('tom', [junk], [{ act: run({ id: 'a9' }), intervals: [] }]);
+    expect(r.upserts[0].structure).toBeNull();
+  });
+
   it('slaat Strava-stubs en krachttraining over', () => {
     const r = matchActivities('tom', [], [
       { act: run({ id: 's', source: 'STRAVA' }), intervals: null },
@@ -309,12 +357,31 @@ describe('wellnessToWeeks', () => {
 });
 
 describe('zonesFromSettings', () => {
+  const real = [
+    { types: ['Ride', 'VirtualRide'], ftp: 230, hr_zones: [130, 150, 160] },
+    { types: ['Run', 'VirtualRun'], lthr: 172, max_hr: 192, hr_zones: [136, 152, 162, 171, 176, 182, 192] }
+  ];
+
   it('haalt zone 2 uit de hardloopzones', () => {
-    const z = zonesFromSettings([
-      { types: ['Ride', 'VirtualRide'], ftp: 230, hr_zones: [130, 150, 160] },
-      { types: ['Run', 'VirtualRun'], lthr: 172, max_hr: 192, hr_zones: [136, 152, 162, 171, 176, 182, 192] }
-    ]);
-    expect(z).toEqual({ z2Low: 137, z2High: 152, lthr: 172, maxHr: 192, ftp: 230 });
+    expect(zonesFromSettings(real, 185, true)).toMatchObject({
+      hrValid: true, z2Low: 137, z2High: 152, lthr: 172, maxHr: 192, ftp: 230
+    });
+  });
+
+  it('negeert de standaardwaarden van een nieuw intervals.icu-account', () => {
+    // max 220 / omslag 200 terwijl je hoogste hartslag 182 is: niet van jou
+    const defaults = [
+      { types: ['Ride'], ftp: 250 },
+      { types: ['Run'], lthr: 200, max_hr: 220, hr_zones: [169, 179, 185, 190, 195, 200, 220] }
+    ];
+    const z = zonesFromSettings(defaults, 182, false);
+    expect(z).toMatchObject({ hrValid: false, z2High: null, lthr: null, maxHr: null, ftp: null });
+    expect(z.raw).toEqual({ maxHr: 220, lthr: 200, ftp: 250 });
+  });
+
+  it('neemt FTP alleen over als je met een wattmeter rijdt', () => {
+    expect(zonesFromSettings(real, 185, false).ftp).toBeNull();
+    expect(zonesFromSettings(real, 185, true).ftp).toBe(230);
   });
 
   it('geeft niets als er geen zones zijn', () => {

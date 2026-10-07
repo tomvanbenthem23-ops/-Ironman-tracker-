@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GOAL_SPLITS } from './config';
-import { anchors, runThreshold, windPenaltyKmh, zone2 } from './fitness';
+import { anchors, maxHrOf, runThreshold, windPenaltyKmh, zone2 } from './fitness';
 import {
   buildStep,
   compliance,
@@ -138,11 +138,33 @@ describe('fitheidsankers', () => {
       run('2026-09-29', 14.66, 81.7, 156, 181)
     ]);
     const a = runThreshold(s, 'tom', '2026-10-06')!;
-    // omslag ≈ 0,92 × 182 = 167, rust 55: rond 4:50 /km in plaats van ±5:22 uit de snelste run
-    expect(a.value).toBeGreaterThan(4.6);
-    expect(a.value).toBeLessThan(5.0);
-    expect(a.basis[0]).toContain('omslag 167');
+    // max = middelste van de drie hoogste pieken (182, 181, 168) = 181, omslag 90% = 163
+    expect(a.basis[0]).toContain('omslag 163');
+    expect(a.value).toBeGreaterThan(4.8);
+    expect(a.value).toBeLessThan(5.2);
     expect(a.confidence).not.toBe('hoog');
+  });
+
+  it('laat één sensorpiek het omslagpunt niet opblazen', () => {
+    // zoals Quirijn: één run met max 207, verder rond 190
+    const run = (date: string, max: number) =>
+      wo({ type: 'lange_run', date, stats: { done: true, afstand: 10, tijdMin: 55, gemHr: 160, maxHr: max } });
+    const s = state([run('2026-09-10', 207), run('2026-09-17', 190), run('2026-09-24', 188), run('2026-10-01', 185)]);
+    expect(maxHrOf(s, 'tom', '2026-10-06')).toBe(190);
+  });
+
+  it('weegt een run dicht bij het omslagpunt zwaarder dan rustige runs', () => {
+    const run = (date: string, km: number, min: number, hr: number) =>
+      wo({ type: 'lange_run', date, stats: { done: true, afstand: km, tijdMin: min, gemHr: hr, maxHr: 200 } });
+    const s = state([
+      run('2026-09-20', 16.3, 77.7, 170), // hard: 4:46 /km bij 170
+      run('2026-09-24', 10, 60, 130),
+      run('2026-09-27', 10, 60, 132),
+      run('2026-09-29', 10, 60, 131)
+    ]);
+    const a = runThreshold(s, 'tom', '2026-10-06')!;
+    // de harde run (frac ≈ 0,92) domineert; de rustige runs (frac ≈ 0,6) zouden ±4:45 geven
+    expect(a.value).toBeLessThan(4.7);
   });
 
   it('kijkt alleen naar trainingen vóór de peildatum', () => {

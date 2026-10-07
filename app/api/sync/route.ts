@@ -10,8 +10,8 @@ import {
   zonesFromSettings,
   type IcuInterval
 } from '@/lib/icu-map';
-import { PERSONS } from '@/lib/config';
-import { addDays, iso } from '@/lib/calc';
+import { PERSONS, TYPES } from '@/lib/config';
+import { addDays, iso, robustMax } from '@/lib/calc';
 import type { GarminRec, Person, Workout } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +35,9 @@ export async function GET(req: NextRequest) {
 
 async function run(req: NextRequest) {
   const only = req.nextUrl.searchParams.get('person');
+  // ?rebuild=1: alles vanaf 1 september opnieuw, inclusief intervallen van al
+  // gesynchroniseerde trainingen — nodig als de omzetregels veranderd zijn
+  const rebuild = req.nextUrl.searchParams.get('rebuild') === '1';
   const people = PERSONS.filter((p) => (!only || p === only) && icuCreds(p));
   if (!people.length) {
     return NextResponse.json({ ok: true, results: [], message: 'Geen intervals.icu-koppeling ingesteld.' });
@@ -43,7 +46,7 @@ async function run(req: NextRequest) {
   const results = [];
   for (const person of people) {
     try {
-      results.push({ person, ok: true, ...(await syncPerson(person)) });
+      results.push({ person, ok: true, ...(await syncPerson(person, rebuild)) });
     } catch (e) {
       results.push({ person, ok: false, error: e instanceof Error ? e.message : String(e) });
     }
@@ -52,15 +55,16 @@ async function run(req: NextRequest) {
   return NextResponse.json({ ok, results }, { status: ok ? 200 : 502 });
 }
 
-async function syncPerson(person: Person) {
+async function syncPerson(person: Person, rebuild = false) {
   const creds = icuCreds(person)!;
   const today = iso(new Date());
 
   const [settingRow] = await db.select().from(personSettings).where(eq(personSettings.person, person));
   // drie dagen overlap: Garmin synct soms pas later door
-  const oldest = settingRow?.lastSync
-    ? iso(addDays(settingRow.lastSync, -3))
-    : FIRST_SYNC_FROM;
+  const oldest =
+    settingRow?.lastSync && !rebuild
+      ? iso(addDays(settingRow.lastSync, -3))
+      : FIRST_SYNC_FROM;
 
   /* ---------- activiteiten ---------- */
   const existing: Workout[] = (
@@ -72,9 +76,9 @@ async function syncPerson(person: Person) {
     (a) => a.source !== 'STRAVA' && disciplineOf(a.type)
   );
 
-  // intervallen alleen ophalen voor nieuwe activiteiten; max 4 tegelijk
+  // intervallen alleen ophalen voor nieuwe activiteiten (bij rebuild: alle); max 4 tegelijk
   const intervals = new Map<string, IcuInterval[] | null>();
-  const todo = acts.filter((a) => !known.has(String(a.id)));
+  const todo = rebuild ? acts : acts.filter((a) => !known.has(String(a.id)));
   for (let i = 0; i < todo.length; i += 4) {
     await Promise.all(
       todo.slice(i, i + 4).map(async (a) => {
@@ -118,16 +122,32 @@ async function syncPerson(person: Person) {
   }
 
   /* ---------- zones: niet over een handmatige zone 2 heen ---------- */
-  const zones = zonesFromSettings(await sportSettings(creds).catch(() => []));
+  const all = [...existing, ...res.upserts];
+  const observedMax = robustMax(
+    all.filter((w) => TYPES[w.type]?.cat === 'run' && w.stats?.maxHr).map((w) => w.stats.maxHr!)
+  );
+  const hasPower = all.some((w) => TYPES[w.type]?.cat === 'fiets' && w.source === 'icu' && w.stats?.vermogen);
+  const zones = zonesFromSettings(await sportSettings(creds).catch(() => []), observedMax, hasPower);
+
   const set: Record<string, unknown> = { lastSync: new Date(), updatedAt: new Date() };
-  if (settingRow?.z2Source !== 'manual' && zones.z2High) {
-    set.z2Low = zones.z2Low;
-    set.z2High = zones.z2High;
-    set.z2Source = 'garmin';
+  if (settingRow?.z2Source !== 'manual') {
+    if (zones.z2High) {
+      set.z2Low = zones.z2Low;
+      set.z2High = zones.z2High;
+      set.z2Source = 'garmin';
+    } else if (settingRow?.z2Source === 'garmin') {
+      // eerder overgenomen standaardzones van intervals.icu weer weghalen
+      set.z2Low = null;
+      set.z2High = null;
+      set.z2Source = null;
+    }
   }
   if (zones.lthr) set.lthr = zones.lthr;
+  else if (settingRow?.lthr && settingRow.lthr === zones.raw.lthr) set.lthr = null;
   if (zones.maxHr && !settingRow?.maxHr) set.maxHr = zones.maxHr;
+  else if (!zones.hrValid && settingRow?.maxHr && settingRow.maxHr === zones.raw.maxHr) set.maxHr = null;
   if (zones.ftp && !settingRow?.ftp) set.ftp = zones.ftp;
+  else if (!hasPower && settingRow?.ftp && settingRow.ftp === zones.raw.ftp) set.ftp = null;
   await db
     .insert(personSettings)
     .values({ person, ...set })

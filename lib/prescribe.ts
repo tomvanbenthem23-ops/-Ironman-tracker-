@@ -111,7 +111,7 @@ const BIKE_RANGE: Record<string, [number, number]> = {
   korte_fiets: [60, 75],
   bike60: [60, 60],
   bike90: [90, 120],
-  bike150: [150, 180]
+  bike150: [150, 210] // tot 3,5 uur: minstens één keer de race-afstand gereden voor de taper
 };
 
 function level<T>(ladder: T[], step: number, wk: WeekKind): T {
