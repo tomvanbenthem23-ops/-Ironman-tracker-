@@ -122,7 +122,11 @@ async function syncPerson(person: Person, rebuild = false) {
   }
 
   /* ---------- zones: niet over een handmatige zone 2 heen ---------- */
-  const all = [...existing, ...res.upserts];
+  // per training één keer: de bijgewerkte versie vervangt de oude (anders telt
+  // één hartslagpiek dubbel en lijkt een standaard-max van 220 geloofwaardig)
+  const byId = new Map(existing.map((w) => [w.id, w]));
+  for (const w of res.upserts) byId.set(w.id, w);
+  const all = Array.from(byId.values());
   const observedMax = robustMax(
     all.filter((w) => TYPES[w.type]?.cat === 'run' && w.stats?.maxHr).map((w) => w.stats.maxHr!)
   );
