@@ -129,9 +129,9 @@ function Banner({ year, month }: { year: number; month: number }) {
   if (year === 2026 && month === 8) {
     body = (
       <>
-        🔥 <b>Warm-up maand.</b> Vul bij elke training je tijden in — dit wordt
-        jullie baseline. Vanaf oktober rollen hier persoonlijke targets uit die
-        elke week iets scherper worden richting sub-5u.
+        🔥 <b>Warm-up maand.</b> Vul bij elke training je tijden in — hieruit
+        leest de tracker jullie startfitheid. Vanaf oktober krijgt elke training
+        een voorschrift.
       </>
     );
   } else if (year >= 2027) {
@@ -139,17 +139,18 @@ function Banner({ year, month }: { year: number; month: number }) {
     body = (
       <>
         💪 <b>Fase 2 — het echte werk.</b> Het palet is opgeschroefd: langere
-        ritten, interval in elke discipline. De targets bouwen gewoon door op
-        jullie progressie sinds september.
+        ritten, interval in elke discipline. De voorschriften bouwen door op
+        jullie fitheid van dat moment; vanaf 5 april begint de taper.
       </>
     );
   } else if (new Date(year, month, 1) >= new Date(2026, 9, 1)) {
     cls = 'border-[#9fd4b3] bg-[#e7f5ec] text-[#1c6b3c]';
     body = (
       <>
-        🎯 <b>Target-fase.</b> Elke duurtraining toont je doeltempo voor die
-        week, opgebouwd vanaf je september-baseline richting racetempo (week van
-        12 april). Groen = gehaald.
+        🎯 <b>Opbouw.</b> Elke training krijgt een voorschrift: hoe ver, hoe hard
+        of in welke hartslag, en de opbouw — uit jullie huidige fitheid, richting
+        wat sub-5 vraagt. Long runs altijd in zone 2. Elke vierde week is een
+        rustweek. Na afloop: groene stip = gehaald.
       </>
     );
   }

@@ -10,9 +10,9 @@ import {
   kindOf,
   parseNum,
   parseSpeed,
-  parseTijd,
-  targetFor
+  parseTijd
 } from '@/lib/calc';
+import { compliance, prescribe, WEEK_LABEL } from '@/lib/prescribe';
 import { useStore } from '@/lib/store';
 import type { Kind, Stats, Wind, WindDir } from '@/lib/types';
 import { BlockEditor, blocksToRows, rowsToBlocks, type BlockRow } from './block-editor';
@@ -103,7 +103,9 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
   const fromGarmin = w.source === 'icu';
   const autoWind = w.wind?.source === 'auto';
   const d = fromIso(w.date);
-  const tgt = isKracht ? null : targetFor(state, w.person, w.type, w.date);
+  // het voorschrift volgt de soort die nu in de modal gekozen is
+  const plan = isKracht ? null : prescribe(state, { ...w, kind });
+  const verdict = plan && w.stats?.done ? compliance(w, plan) : null;
 
   const speedLabel =
     t.cat === 'fiets'
@@ -172,9 +174,52 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
         </h3>
         {t.sub && <div className="mb-3 text-[.8rem] text-im-muted">{t.sub}</div>}
 
-        {tgt != null && (
-          <div className="mb-3 rounded-im-ctl bg-[#f0f4f8] px-2.5 py-2 text-[.85rem]">
-            🎯 Target deze week: <b>{fmtSpeed(tgt, w.type)}</b>
+        {plan && (
+          <div className="mb-3 rounded-im-ctl bg-[#f0f4f8] px-3 py-2.5 text-[.85rem]">
+            <div className="flex items-baseline justify-between gap-2">
+              <span>
+                🎯 <b>{plan.summary}</b>
+              </span>
+              <span className="shrink-0 text-[.7rem] uppercase tracking-[.5px] text-im-muted">
+                {WEEK_LABEL[plan.weekKind]}
+              </span>
+            </div>
+            <ul className="mt-1.5 space-y-0.5 text-[.8rem] leading-snug text-[#334]">
+              {plan.details.map((d) => (
+                <li key={d}>{d}</li>
+              ))}
+            </ul>
+            {plan.missing && (
+              <p className="mt-1.5 text-[.75rem] font-semibold text-im-warn">{plan.missing}</p>
+            )}
+            {plan.basis.length > 0 && (
+              <p className="mt-1.5 text-[.72rem] text-im-muted">
+                Gebaseerd op: {plan.basis.slice(0, 3).join(' · ')}
+              </p>
+            )}
+            {verdict && (
+              <p
+                className={`mt-1.5 text-[.8rem] font-semibold ${
+                  verdict.verdict === 'hit'
+                    ? 'text-im-good'
+                    : verdict.verdict === 'close'
+                      ? 'text-im-warn'
+                      : 'text-im-bad'
+                }`}
+              >
+                {verdict.verdict === 'hit' ? '✓ Gehaald' : verdict.verdict === 'close' ? '≈ Bijna' : '✗ Niet gehaald'}
+                {': '}
+                {verdict.notes.join(' · ')}
+              </p>
+            )}
+            {!!plan.blocks?.length && rows.length === 0 && (
+              <button
+                onClick={() => setRows(blocksToRows(plan.blocks, w.type))}
+                className="mt-2 rounded-im-ctl border border-im-line bg-white px-2.5 py-1 text-[.75rem] font-semibold hover:border-im-ink"
+              >
+                📋 Voorschrift als opbouw overnemen
+              </button>
+            )}
           </div>
         )}
 

@@ -43,28 +43,25 @@ export function Palette({
 
       <details className="mt-3.5 rounded-im-day bg-im-card p-3 text-[.78rem] leading-relaxed text-im-muted">
         <summary className="cursor-pointer font-semibold text-im-ink">
-          🎯 Hoe werken de targets?
+          🎯 Hoe werken de voorschriften?
         </summary>
         <p className="mt-1.5">
-          September is de warm-up maand: alles wat jullie invullen wordt de
-          baseline. Vanaf oktober krijgt elke duurtraining een target dat
-          wekelijks opschuift van jullie eigen baseline naar het racedoel in de
-          week van 12 april. Vanaf januari schakelt het palet om naar het
-          zwaardere schema; de targets van de nieuwe varianten bouwen door op
-          jullie niveau van dat moment.
+          Elke geplande training krijgt een voorschrift: afstand of duur, tempo of
+          hartslag, en bij kwaliteitstrainingen de opbouw (bv. 6 × 800 m). Dat
+          rekent de tracker uit jullie eigen trainingen van de laatste weken —
+          drempeltempo, zone-2-tempo, duursnelheid op de fiets en zwem-CSS — en
+          schuift het elke opbouwweek een stap op richting wat sub-5 vraagt.
         </p>
         <p className="mt-1.5">
-          <b>Racedoelen voor sub-5u (raceweek):</b>
-          <br />
-          Long run → 5:15 /km · Interval run → 4:40 /km · Easy run → 5:45 /km
-          <br />
-          60 min bike → 35 km/u · 90–120 min → 33 km/u · 150 min → 31 km/u
-          <br />
-          Swim 2000m → 2:00 /100m · Swim interval → 1:55 /100m
+          Long runs zijn altijd zone 2: daar is de hartslag het doel en het tempo
+          alleen een verwachting. Elke vierde week is een rustweek (±35% minder);
+          klik in de weekkolom om een week om te zetten.
         </p>
         <p className="mt-1.5">
-          Op de dag zelf: ±38 min zwemmen, ±2u40 fietsen, ±1u50 lopen plus
-          wissels.
+          <b>Sub-5 op de dag zelf:</b>
+          <br />
+          zwemmen 0:37 (1:57 /100m) · fietsen 2:33 (35,3 km/u) · lopen 1:42
+          (4:50 /km) · wissels 0:08
         </p>
       </details>
     </>

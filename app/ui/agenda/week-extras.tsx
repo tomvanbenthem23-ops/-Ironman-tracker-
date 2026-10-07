@@ -1,7 +1,42 @@
 'use client';
 
-import { weekRec } from '@/lib/calc';
+import { fromIso, weekRec } from '@/lib/calc';
+import { defaultWeekKind, WEEK_LABEL, weekInfo } from '@/lib/prescribe';
 import { useStore } from '@/lib/store';
+import type { WeekKind } from '@/lib/types';
+
+const KIND_STYLE: Record<WeekKind, string> = {
+  build: 'border-[#d5dbe2] bg-white text-im-muted',
+  rest: 'border-[#9fc5e8] bg-[#e8f1fb] text-[#1c4f80]',
+  taper: 'border-[#e8d48a] bg-[#fff7e0] text-[#7a5c00]',
+  race: 'border-im-ink bg-im-ink text-white'
+};
+
+/** Opbouw / rustweek / taper. Klikken zet de week om; geldt voor jullie allebei. */
+function WeekKindToggle({ weekKey }: { weekKey: string }) {
+  const { state, setWeekFlag } = useStore();
+  const monday = fromIso(weekKey);
+  const { kind, overridden, index } = weekInfo(state, monday);
+  if (index < 0) return null; // september: warm-up, geen ritme
+
+  const order: WeekKind[] = ['build', 'rest', 'taper'];
+  const next = () => {
+    const n = order[(order.indexOf(kind) + 1) % order.length];
+    // terug bij het standaardritme = de markering weghalen
+    setWeekFlag(weekKey, n === defaultWeekKind(monday) ? null : n);
+  };
+
+  return (
+    <button
+      onClick={next}
+      title={`${WEEK_LABEL[kind]}${overridden ? ' (zelf omgezet)' : ''} — klik om om te zetten`}
+      className={`mb-1 w-full rounded-[7px] border px-1 py-0.5 text-[.66rem] font-semibold ${KIND_STYLE[kind]}`}
+    >
+      {WEEK_LABEL[kind]}
+      {overridden ? ' ✎' : ''}
+    </button>
+  );
+}
 
 const FIELDS = [
   { key: 'rek', emoji: '🧘', label: 'Rekmomenten' },
@@ -31,6 +66,7 @@ export function WeekExtras({
       >
         wk {wk}
       </div>
+      <WeekKindToggle weekKey={weekKey} />
       {FIELDS.map((f) => {
         const n = rec[f.key] || 0;
         return (

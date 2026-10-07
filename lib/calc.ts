@@ -1,17 +1,4 @@
-import {
-  BETTER,
-  DEFAULT_KIND,
-  DISC_REF,
-  GOAL_MIN,
-  PANDA_START,
-  RACE,
-  SEPT_FROM,
-  SEPT_TO,
-  T0,
-  T1,
-  TARGET_FROM,
-  TYPES
-} from './config';
+import { BETTER, DEFAULT_KIND, PANDA_START, RACE, SEPT_FROM, TYPES } from './config';
 import type { Block, Discipline, Kind, Person, State, Workout } from './types';
 
 /**
@@ -87,13 +74,6 @@ export function fmtSpeed(v: number | null | undefined, type: string): string {
   if (v == null || !u) return '';
   if (u === 'pace_km') return fmtPace(v) + ' /km';
   if (u === 'pace_100') return fmtPace(v) + ' /100m';
-  return fmtKmh(v);
-}
-
-export function fmtSpeedCat(v: number | null | undefined, cat: Discipline): string {
-  if (v == null) return '—';
-  if (cat === 'run') return fmtPace(v) + ' /km';
-  if (cat === 'zwem') return fmtPace(v) + ' /100m';
   return fmtKmh(v);
 }
 
@@ -187,131 +167,7 @@ export function doneWorkouts(
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
-type SpeedPoint = { d: string; v: number; hr?: number | null };
-
-export function speedsOf(list: Workout[]): SpeedPoint[] {
-  const out: SpeedPoint[] = [];
-  for (const w of list) {
-    const v = derivedSpeed(w);
-    if (v != null) out.push({ d: w.date, v, hr: w.stats?.gemHr ?? null });
-  }
-  return out;
-}
-
-/* ================= TARGETS ================= */
-
-function septAvg(
-  state: State,
-  person: Person,
-  filter: (w: Workout) => boolean
-): number | null {
-  const vals = workoutsOf(state, person)
-    .filter((w) => w.date >= SEPT_FROM && w.date <= SEPT_TO && filter(w))
-    .map(derivedSpeed)
-    .filter((v): v is number => v != null);
-  if (!vals.length) return null;
-  return vals.reduce((a, b) => a + b, 0) / vals.length;
-}
-
-/**
- * September-gemiddelde van dit type. Bestaat dat niet — het normale geval voor
- * elk fase-2-type — dan het disciplinegemiddelde, geschaald naar dit type.
- */
-export function baseline(state: State, person: Person, type: string): number | null {
-  const t = TYPES[type];
-  if (!t || t.goal == null) return null;
-  const direct = septAvg(state, person, (w) => w.type === type);
-  if (direct != null) return direct;
-  const disc = septAvg(state, person, (w) => TYPES[w.type]?.cat === t.cat);
-  if (disc == null) return null;
-  return disc * (t.goal / DISC_REF[t.cat as 'run' | 'fiets' | 'zwem']);
-}
-
-/** Doeltempo voor de week waarin deze training valt. */
-export function targetFor(
-  state: State,
-  person: Person,
-  type: string,
-  dateStr: string
-): number | null {
-  const t = TYPES[type];
-  if (!t || t.goal == null) return null;
-  const d = fromIso(dateStr);
-  if (d < TARGET_FROM) return null;
-  const b = baseline(state, person, type);
-  if (b == null) return null;
-
-  const wk = mondayOf(d);
-  const f = Math.min(1, Math.max(0, (+wk - +T0) / (+T1 - +T0)));
-  const better = BETTER[t.cat as 'run' | 'fiets' | 'zwem'];
-  const alreadyBetter = better === 'low' ? b <= t.goal : b >= t.goal;
-  // al beter dan het doel: dan nog 4% erbij over de hele periode
-  if (alreadyBetter) return better === 'low' ? b * (1 - 0.04 * f) : b * (1 + 0.04 * f);
-  return b + (t.goal - b) * f;
-}
-
-export type TargetClass = 'hit' | 'close' | 'miss';
-
-export function targetClass(actual: number, target: number, type: string): TargetClass {
-  const better = BETTER[TYPES[type].cat as 'run' | 'fiets' | 'zwem'];
-  const ok = better === 'low' ? actual <= target : actual >= target;
-  const close = better === 'low' ? actual <= target * 1.05 : actual >= target * 0.95;
-  return ok ? 'hit' : close ? 'close' : 'miss';
-}
-
 /* ================= VORM & TRENDS ================= */
-
-/** Gewogen gemiddelde over de laatste `days` dagen; recenter weegt zwaarder. */
-export function recentSpeed(
-  state: State,
-  person: Person,
-  cat: Discipline,
-  days = 42
-): { v: number; n: number } | null {
-  const cut = addDays(new Date(), -days);
-  const vals = speedsOf(doneWorkouts(state, person, cat).filter((w) => w.date >= iso(cut)));
-  if (!vals.length) return null;
-  let sw = 0;
-  let s = 0;
-  vals.forEach((x, i) => {
-    const wt = i + 1;
-    sw += wt;
-    s += x.v * wt;
-  });
-  return { v: s / sw, n: vals.length };
-}
-
-/** Plat gemiddelde over een venster [from, to). */
-export function windowAvg(
-  state: State,
-  person: Person,
-  cat: Discipline,
-  fromIso_: string,
-  toIso_: string
-): { v: number; n: number } | null {
-  const vals = speedsOf(
-    doneWorkouts(state, person, cat).filter((w) => w.date >= fromIso_ && w.date < toIso_)
-  );
-  if (!vals.length) return null;
-  return { v: vals.reduce((a, b) => a + b.v, 0) / vals.length, n: vals.length };
-}
-
-/** Efficiëntie: km/u per hartslag ×100. Hoger is altijd beter. */
-export function efAvg(
-  state: State,
-  person: Person,
-  cat: Discipline,
-  fromIso_: string,
-  toIso_: string
-): number | null {
-  const vals = speedsOf(
-    doneWorkouts(state, person, cat).filter((w) => w.date >= fromIso_ && w.date < toIso_)
-  ).filter((x) => x.hr);
-  if (!vals.length) return null;
-  const toKmh = (x: SpeedPoint) =>
-    cat === 'fiets' ? x.v : cat === 'run' ? 60 / x.v : 6 / x.v;
-  return (vals.reduce((a, b) => a + toKmh(b) / (b.hr as number), 0) / vals.length) * 100;
-}
 
 export type Trend = { kind: 'up' | 'down' | 'flat' | 'none'; pct?: string };
 
@@ -326,62 +182,6 @@ export function trend(
     BETTER[cat as 'run' | 'fiets' | 'zwem'] === 'low' ? recent < prev : recent > prev;
   const pct = fmtDec(Math.abs(((recent - prev) / prev) * 100));
   return { kind: better ? 'up' : 'down', pct };
-}
-
-/* ================= EINDTIJD ================= */
-
-export type Estimate = {
-  parts: { zwem?: number; fiets?: number; run?: number; wissels: number };
-  total: number | null;
-  complete: boolean;
-  sw: { v: number; n: number } | null;
-  bi: { v: number; n: number } | null;
-  ru: { v: number; n: number } | null;
-  conf: 'hoog' | 'gemiddeld' | 'laag';
-};
-
-/**
- * Racevoorspelling uit de vorm van de laatste 6 weken.
- * zwem 1900m met wetsuitvoordeel, fiets 90km met race-effect, run 21,1km met
- * vermoeidheid van het fietsen, plus 8 minuten wissels.
- */
-export function estimateFinish(state: State, person: Person): Estimate {
-  const sw = recentSpeed(state, person, 'zwem');
-  const bi = recentSpeed(state, person, 'fiets');
-  const ru = recentSpeed(state, person, 'run');
-
-  const parts: Estimate['parts'] = { wissels: 8 };
-  if (sw) parts.zwem = sw.v * 0.97 * 19;
-  if (bi) parts.fiets = (90 / (bi.v * 1.03)) * 60;
-  if (ru) parts.run = ru.v * 1.05 * 21.1;
-
-  const complete = !!(sw && bi && ru);
-  const total = complete
-    ? (parts.zwem as number) + (parts.fiets as number) + (parts.run as number) + parts.wissels
-    : null;
-  const nMin = complete ? Math.min(sw!.n, bi!.n, ru!.n) : 0;
-
-  return {
-    parts,
-    total,
-    complete,
-    sw,
-    bi,
-    ru,
-    conf: nMin >= 6 ? 'hoog' : nMin >= 3 ? 'gemiddeld' : 'laag'
-  };
-}
-
-/** Discipline met de grootste relatieve achterstand op zijn racedoel. */
-export function biggestGap(est: Estimate): string | null {
-  if (!est.complete) return null;
-  const gaps: [string, number][] = [
-    ['lopen', (est.ru!.v - DISC_REF.run) / DISC_REF.run],
-    ['fietsen', (DISC_REF.fiets - est.bi!.v) / DISC_REF.fiets],
-    ['zwemmen', (est.sw!.v - DISC_REF.zwem) / DISC_REF.zwem]
-  ];
-  const worst = gaps.filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]);
-  return worst.length ? worst[0][0] : null;
 }
 
 /* ================= WEKEN, VOLUME, PANDA ================= */
@@ -450,62 +250,6 @@ export function weekRec(state: State, person: Person, weekKey: string) {
 
 export function garminRec(state: State, person: Person, weekKey: string) {
   return state.garmin[person]?.[weekKey] ?? {};
-}
-
-/* ================= SAMENVATTING ================= */
-
-/** De geschreven analyse onderaan het dashboard (sectie 7). */
-export function summaryText(
-  state: State,
-  person: Person,
-  naam: string,
-  est: Estimate,
-  consPct: number | null,
-  lastVolume: number
-): string {
-  const n = doneWorkouts(state, person).length;
-  if (!n) {
-    return 'Nog geen afgeronde trainingen. Zodra je trainingen afvinkt met tijd en afstand begint hier de analyse: vorm per discipline, trends, en een steeds nauwkeurigere eindtijdvoorspelling.';
-  }
-
-  const bits: string[] = [
-    `${naam} heeft <b>${n} ${n === 1 ? 'training' : 'trainingen'}</b> afgerond.`
-  ];
-
-  if (consPct != null) {
-    bits.push(
-      consPct >= 85
-        ? `Consistentie is ${consPct}% — sterk, dit is de belangrijkste voorspeller van je eindtijd.`
-        : consPct >= 65
-          ? `Consistentie is ${consPct}% — kan strakker; elke gemiste sessie kost meer dan een langzame sessie.`
-          : `Consistentie is ${consPct}% — hier zit je grootste probleem, niet in je tempo.`
-    );
-  }
-
-  if (est.complete) {
-    const total = est.total as number;
-    bits.push(
-      `Op huidige vorm kom je uit rond <b>${fmtHM(total)}</b>. ` +
-        (total <= GOAL_MIN
-          ? 'Dat is onder de 5 uur — de opdracht is nu vasthouden en niet blesseren.'
-          : `Voor sub-5 moet er nog ${fmtHM(total - GOAL_MIN)} af; de weektargets in de agenda zijn daarop berekend.`)
-    );
-  } else {
-    bits.push(
-      'Voor een eindtijdschatting mis ik nog recente afgeronde trainingen in minstens één discipline.'
-    );
-  }
-
-  if (lastVolume > 0 && lastVolume < 4) {
-    bits.push(
-      `Weekvolume (${fmtDec(lastVolume)}u) is aan de lage kant voor een 70.3 — bouw richting 7–9u per week.`
-    );
-  }
-  if (lastVolume >= 9) {
-    bits.push(`Let op: ${fmtDec(lastVolume)}u in één week is fors. Herstel is ook training.`);
-  }
-
-  return bits.join(' ');
 }
 
 /* ================= SOORT & STRUCTUUR ================= */

@@ -41,12 +41,6 @@ export const TYPES: Record<string, TrainingType> = {
   full_body:    { label: 'Full body session',sub: '',                      cat: 'kracht', phase: 2, color: '#b6d7a8', border: '#6aa84f', goal: null }
 };
 
-/** Referentiedoel per discipline — schaalt baselines van fase-2-types. */
-export const DISC_REF: Record<'run' | 'fiets' | 'zwem', number> = {
-  run: 5.25,
-  fiets: 33,
-  zwem: 2.0
-};
 
 /** Lager tempo is beter (run, zwem) vs. hogere snelheid is beter (fiets). */
 export const BETTER: Record<'run' | 'fiets' | 'zwem', 'low' | 'high'> = {
@@ -57,7 +51,6 @@ export const BETTER: Record<'run' | 'fiets' | 'zwem', 'low' | 'high'> = {
 
 export const RACE = new Date(2027, 3, 18, 8, 0, 0);
 export const RACE_DATE = '2027-04-18';
-export const GOAL_MIN = 300; // sub-5 uur
 
 /** [jaar, maandindex] — precies acht maanden, navigatie klemt hierop. */
 export const MONTHS: [number, number][] = [
@@ -71,14 +64,10 @@ export const MONTH_NAMES = [
 ];
 export const DAY_NAMES = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 
-export const TARGET_FROM = new Date(2026, 9, 1);  // geen targets ervoor
-export const T0 = new Date(2026, 9, 5);           // start van de targetopbouw
-export const T1 = new Date(2027, 3, 12);          // maandag van de raceweek
 export const PHASE2_FROM = new Date(2027, 0, 1);  // palet schakelt om
 export const PANDA_START = new Date(2026, 7, 31); // eerste week die telt
 
 export const SEPT_FROM = '2026-09-01';
-export const SEPT_TO = '2026-09-30';
 
 export const DISCIPLINES: {
   cat: 'run' | 'fiets' | 'zwem';
@@ -153,3 +142,19 @@ export const KIND_SHORT: Record<Kind, string> = {
 
 /** Beaufort-schaal → gemiddelde windsnelheid in km/u (midden van de band). */
 export const BFT_KMH = [0, 3, 9, 15, 24, 34, 44, 56, 68, 82, 96, 110, 120];
+
+/* ================= RACE & PERIODISERING ================= */
+
+/**
+ * Hoe 5:00 over de onderdelen verdeeld is, in minuten. De oude racedoelen
+ * (2:00/100m, 33 km/u, 5:15/km) kwamen samen op ±5:21 uit — dit telt wél op
+ * tot 300: zwem 1:57/100m, fiets 35,3 km/u, run 4:50/km, wissels 8 min.
+ */
+export const GOAL_SPLITS = { zwem: 37, fiets: 153, run: 102, wissels: 8 } as const;
+export const RACE_DIST = { zwemM: 1900, fietsKm: 90, runKm: 21.1 } as const;
+
+/** Maandag van de eerste opbouwweek; vanaf hier loopt het 3:1-ritme. */
+export const BLOCK_START = new Date(2026, 9, 5);
+/** Taperweek en raceweek. */
+export const TAPER_WEEK = new Date(2027, 3, 5);
+export const RACE_WEEK = new Date(2027, 3, 12);

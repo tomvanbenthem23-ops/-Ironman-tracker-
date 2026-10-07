@@ -1,9 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
-  baseline,
   consistency,
   derivedSpeed,
-  estimateFinish,
   fmtHM,
   fmtPace,
   fmtTijd,
@@ -12,14 +10,9 @@ import {
   pandaScore,
   parseSpeed,
   parseTijd,
-  recentSpeed,
-  targetClass,
-  targetFor,
-  summaryText,
   trend,
   weekNr
 } from './calc';
-import { DISC_REF, T0, T1 } from './config';
 import { emptyState, type Person, type State, type Stats } from './types';
 
 /* ================= helpers ================= */
@@ -110,185 +103,6 @@ describe('derivedSpeed', () => {
   });
 });
 
-/* ================= targets ================= */
-
-describe('baseline', () => {
-  it('gebruikt het september-gemiddelde van het type zelf', () => {
-    const s = st(
-      { type: 'lange_run', date: '2026-09-05', stats: { tijdMin: 60, afstand: 10 } }, // 6:00
-      { type: 'lange_run', date: '2026-09-12', stats: { tijdMin: 56, afstand: 10 } } // 5:36
-    );
-    expect(baseline(s, P, 'lange_run')).toBeCloseTo(5.8, 6);
-  });
-
-  it('schaalt het disciplinegemiddelde voor een fase-2-type zonder historie', () => {
-    const s = st({ type: 'lange_run', date: '2026-09-05', stats: { tijdMin: 60, afstand: 10 } });
-    // interval_run heeft geen septemberdata: 6,0 × (4,667 / 5,25)
-    expect(baseline(s, P, 'interval_run')).toBeCloseTo(6 * (4.667 / DISC_REF.run), 6);
-  });
-
-  it('geeft null zonder septemberdata en voor krachttraining', () => {
-    expect(baseline(emptyState(), P, 'lange_run')).toBeNull();
-    const s = st({ type: 'lange_run', date: '2026-09-05', stats: { tijdMin: 60, afstand: 10 } });
-    expect(baseline(s, P, 'core')).toBeNull();
-  });
-});
-
-describe('targetFor', () => {
-  const sept = st({
-    type: 'lange_run',
-    date: '2026-09-05',
-    stats: { tijdMin: 60, afstand: 10 } // baseline 6:00 /km, doel 5:15
-  });
-
-  it('toont niets vóór 1 oktober', () => {
-    expect(targetFor(sept, P, 'lange_run', '2026-09-28')).toBeNull();
-  });
-
-  it('staat op de baseline bij T0 en op het doel in de raceweek', () => {
-    expect(targetFor(sept, P, 'lange_run', iso(T0))).toBeCloseTo(6.0, 6);
-    expect(targetFor(sept, P, 'lange_run', iso(T1))).toBeCloseTo(5.25, 6);
-  });
-
-  it('interpoleert lineair daartussen', () => {
-    const mid = new Date((+T0 + +T1) / 2);
-    const t = targetFor(sept, P, 'lange_run', iso(mondayOf(mid)))!;
-    const f = (+mondayOf(mid) - +T0) / (+T1 - +T0);
-    expect(t).toBeCloseTo(6.0 + (5.25 - 6.0) * f, 6);
-    expect(t).toBeGreaterThan(5.25);
-    expect(t).toBeLessThan(6.0);
-  });
-
-  it('vraagt 4% extra als de baseline al beter is dan het doel', () => {
-    const snel = st({
-      type: 'lange_run',
-      date: '2026-09-05',
-      stats: { tijdMin: 50, afstand: 10 } // 5:00 /km, sneller dan het doel van 5:15
-    });
-    expect(targetFor(snel, P, 'lange_run', iso(T0))).toBeCloseTo(5.0, 6);
-    expect(targetFor(snel, P, 'lange_run', iso(T1))).toBeCloseTo(5.0 * 0.96, 6);
-  });
-
-  it('doet hetzelfde omgekeerd voor de fiets', () => {
-    const snel = st({
-      type: 'lange_fiets',
-      date: '2026-09-05',
-      stats: { tijdMin: 60, afstand: 35 } // 35 km/u, harder dan het doel van 33
-    });
-    expect(targetFor(snel, P, 'lange_fiets', iso(T1))).toBeCloseTo(35 * 1.04, 6);
-  });
-});
-
-describe('targetClass', () => {
-  it('kleurt tempo: lager is beter', () => {
-    expect(targetClass(5.2, 5.25, 'lange_run')).toBe('hit');
-    expect(targetClass(5.25, 5.25, 'lange_run')).toBe('hit');
-    expect(targetClass(5.4, 5.25, 'lange_run')).toBe('close'); // binnen 5%
-    expect(targetClass(5.6, 5.25, 'lange_run')).toBe('miss');
-  });
-
-  it('kleurt snelheid: hoger is beter', () => {
-    expect(targetClass(34, 33, 'lange_fiets')).toBe('hit');
-    expect(targetClass(32, 33, 'lange_fiets')).toBe('close');
-    expect(targetClass(30, 33, 'lange_fiets')).toBe('miss');
-  });
-});
-
-/* ================= vorm & eindtijd ================= */
-
-describe('recentSpeed', () => {
-  it('weegt recentere sessies zwaarder', () => {
-    freeze('2026-10-15');
-    const s = st(
-      { type: 'lange_run', date: '2026-10-01', stats: { done: true, tijdMin: 60, afstand: 10 } }, // 6,0
-      { type: 'lange_run', date: '2026-10-14', stats: { done: true, tijdMin: 50, afstand: 10 } } // 5,0
-    );
-    // (6×1 + 5×2) / 3
-    expect(recentSpeed(s, P, 'run')!.v).toBeCloseTo(16 / 3, 6);
-    expect(recentSpeed(s, P, 'run')!.n).toBe(2);
-  });
-
-  it('kijkt niet verder terug dan 42 dagen en negeert niet-afgevinkte sessies', () => {
-    freeze('2026-11-20');
-    const s = st(
-      { type: 'lange_run', date: '2026-09-01', stats: { done: true, tijdMin: 60, afstand: 10 } },
-      { type: 'lange_run', date: '2026-11-18', stats: { tijdMin: 50, afstand: 10 } }
-    );
-    expect(recentSpeed(s, P, 'run')).toBeNull();
-  });
-});
-
-describe('estimateFinish', () => {
-  const vorm = () =>
-    st(
-      { type: 'zwem', date: '2026-10-10', stats: { done: true, tijdMin: 30, afstand: 1500 } }, // 2:00 /100m
-      { type: 'lange_fiets', date: '2026-10-11', stats: { done: true, tijdMin: 60, afstand: 33 } }, // 33 km/u
-      { type: 'lange_run', date: '2026-10-12', stats: { done: true, tijdMin: 52.5, afstand: 10 } } // 5:15 /km
-    );
-
-  it('rekent de splits met de afgesproken coëfficiënten', () => {
-    freeze('2026-10-15');
-    const est = estimateFinish(vorm(), P);
-    expect(est.complete).toBe(true);
-    expect(est.parts.zwem).toBeCloseTo(2.0 * 0.97 * 19, 6);
-    expect(est.parts.fiets).toBeCloseTo((90 / (33 * 1.03)) * 60, 6);
-    expect(est.parts.run).toBeCloseTo(5.25 * 1.05 * 21.1, 6);
-    expect(est.parts.wissels).toBe(8);
-    expect(est.total).toBeCloseTo(36.86 + 158.8703 + 116.3138 + 8, 2);
-    expect(fmtHM(est.total as number)).toBe('5:20');
-  });
-
-  it('geeft geen totaal als een discipline ontbreekt', () => {
-    freeze('2026-10-15');
-    const s = st({
-      type: 'lange_run',
-      date: '2026-10-12',
-      stats: { done: true, tijdMin: 52.5, afstand: 10 }
-    });
-    const est = estimateFinish(s, P);
-    expect(est.complete).toBe(false);
-    expect(est.total).toBeNull();
-    expect(est.sw).toBeNull();
-  });
-
-  it('bepaalt betrouwbaarheid op de kleinste discipline', () => {
-    freeze('2026-10-15');
-
-    // extra sessies bijzetten in alle drie de disciplines
-    const met = (n: number) => {
-      const s = vorm();
-      for (let i = 0; i < n; i++) {
-        const dag = '2026-10-0' + (i + 1);
-        s.workouts[`z${i}`] = { id: `z${i}`, person: P, type: 'zwem', date: dag,
-          stats: { done: true, tijdMin: 30, afstand: 1500 } };
-        s.workouts[`f${i}`] = { id: `f${i}`, person: P, type: 'lange_fiets', date: dag,
-          stats: { done: true, tijdMin: 60, afstand: 33 } };
-        s.workouts[`r${i}`] = { id: `r${i}`, person: P, type: 'lange_run', date: dag,
-          stats: { done: true, tijdMin: 52.5, afstand: 10 } };
-      }
-      return s;
-    };
-
-    expect(estimateFinish(vorm(), P).conf).toBe('laag'); // 1 sessie per discipline
-    expect(estimateFinish(met(2), P).conf).toBe('gemiddeld'); // 3 per discipline
-    expect(estimateFinish(met(5), P).conf).toBe('hoog'); // 6 per discipline
-  });
-
-  it('laat één achterblijvende discipline de betrouwbaarheid bepalen', () => {
-    freeze('2026-10-15');
-    const s = vorm();
-    for (let i = 0; i < 8; i++) {
-      const dag = '2026-10-0' + ((i % 9) + 1);
-      s.workouts[`z${i}`] = { id: `z${i}`, person: P, type: 'zwem', date: dag,
-        stats: { done: true, tijdMin: 30, afstand: 1500 } };
-      s.workouts[`f${i}`] = { id: `f${i}`, person: P, type: 'lange_fiets', date: dag,
-        stats: { done: true, tijdMin: 60, afstand: 33 } };
-    }
-    // zwem en fiets staan op 9 sessies, de run nog op 1
-    expect(estimateFinish(s, P).conf).toBe('laag');
-  });
-});
-
 /* ================= trends ================= */
 
 describe('trend', () => {
@@ -366,39 +180,5 @@ describe('mondayOf', () => {
     expect(iso(mondayOf('2026-09-06'))).toBe('2026-08-31'); // zondag
     expect(iso(mondayOf('2026-08-31'))).toBe('2026-08-31'); // maandag zelf
     expect(iso(mondayOf('2026-09-02'))).toBe('2026-08-31'); // woensdag
-  });
-});
-
-/* ================= samenvatting ================= */
-
-describe('summaryText', () => {
-  it('schrijft enkelvoud bij één training', () => {
-    freeze('2026-10-20');
-    const s = st({
-      type: 'lange_run',
-      date: '2026-10-01',
-      stats: { done: true, tijdMin: 55, afstand: 10 }
-    });
-    const txt = summaryText(s, P, 'Tom', estimateFinish(s, P), consistency(s, P), 0.9);
-    expect(txt).toContain('<b>1 training</b>');
-    expect(txt).not.toContain('1 trainingen');
-  });
-
-  it('schrijft meervoud bij meerdere trainingen', () => {
-    freeze('2026-10-20');
-    const s = st(
-      { type: 'lange_run', date: '2026-10-01', stats: { done: true, tijdMin: 55, afstand: 10 } },
-      { type: 'lange_run', date: '2026-10-02', stats: { done: true, tijdMin: 55, afstand: 10 } }
-    );
-    const txt = summaryText(s, P, 'Tom', estimateFinish(s, P), consistency(s, P), 1.8);
-    expect(txt).toContain('<b>2 trainingen</b>');
-  });
-
-  it('zegt het netjes als er nog niets is', () => {
-    freeze('2026-10-20');
-    const s = emptyState();
-    expect(summaryText(s, P, 'Tom', estimateFinish(s, P), null, 0)).toBe(
-      'Nog geen afgeronde trainingen. Zodra je trainingen afvinkt met tijd en afstand begint hier de analyse: vorm per discipline, trends, en een steeds nauwkeurigere eindtijdvoorspelling.'
-    );
   });
 });

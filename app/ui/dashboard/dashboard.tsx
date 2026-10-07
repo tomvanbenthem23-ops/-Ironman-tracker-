@@ -1,42 +1,38 @@
 'use client';
 
 import { useMemo } from 'react';
-import { BETTER, DISCIPLINES, DISC_REF, GOAL_MIN, NAMES } from '@/lib/config';
+import { DISCIPLINES, GOAL_SPLITS, NAMES } from '@/lib/config';
 import {
   addDays,
-  biggestGap,
   consistency,
   doneWorkouts,
-  efAvg,
-  estimateFinish,
   fmtDec,
   fmtHM,
+  fmtPace,
   fmtSigned,
-  fmtSpeedCat,
   garminRec,
   iso,
   pandaScore,
-  speedsOf,
-  summaryText,
-  todayIso,
   trend,
   weekKeyOf,
   weekLoad,
   weeksSoFar,
   weekRec,
   weekVolume,
-  windowAvg,
   type Trend
 } from '@/lib/calc';
+import { anchors, type Anchor } from '@/lib/fitness';
+import { REQUIRED } from '@/lib/prescribe';
+import { LEG_LABEL, raceSummary, raceView, type Estimate, type Leg, type LegKey } from '@/lib/race';
 import { useStore } from '@/lib/store';
-import type { Discipline } from '@/lib/types';
+import type { Discipline, Person, State } from '@/lib/types';
 import { Bars, Caption, NoData, Sparkline } from './charts';
 
 export function Dashboard() {
   const { state, person } = useStore();
   const naam = NAMES[person];
 
-  const est = useMemo(() => estimateFinish(state, person), [state, person]);
+  const view = useMemo(() => raceView(state, person), [state, person]);
   const wks = useMemo(() => weeksSoFar(), []);
   const volume = useMemo(
     () => wks.map((wk) => weekVolume(state, person, wk)),
@@ -49,7 +45,7 @@ export function Dashboard() {
 
   return (
     <section className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-3.5 px-6 pb-10 pt-4">
-      <Hero est={est} naam={naam} allDone={allDone} />
+      <Hero view={view} naam={naam} />
 
       {DISCIPLINES.map((d) => (
         <DisciplineCard key={d.cat} {...d} />
@@ -70,7 +66,7 @@ export function Dashboard() {
           }
         />
         <Bars values={volume} color="#3d85c6" />
-        <Caption>trainingsuren per week (laatste {wks.length} weken)</Caption>
+        <Caption>trainingsuren per week (laatste {wks.length} weken, zonder kracht)</Caption>
       </Card>
 
       <GarminCard />
@@ -80,9 +76,7 @@ export function Dashboard() {
         <div
           className="text-[.92rem] leading-[1.65]"
           // alleen <b> uit onze eigen samenvatting, geen invoer van buiten
-          dangerouslySetInnerHTML={{
-            __html: summaryText(state, person, naam, est, consPct, lastVol)
-          }}
+          dangerouslySetInnerHTML={{ __html: raceSummary(view, naam, consPct, lastVol, allDone) }}
         />
       </Card>
     </section>
@@ -91,101 +85,158 @@ export function Dashboard() {
 
 /* ================= eindtijd ================= */
 
-function Hero({
-  est,
-  naam,
-  allDone
-}: {
-  est: ReturnType<typeof estimateFinish>;
-  naam: string;
-  allDone: number;
-}) {
-  if (!est.complete) {
-    const missing = [
-      [est.sw, '🏊 zwemmen'],
-      [est.bi, '🚴 fietsen'],
-      [est.ru, '🏃 lopen']
-    ]
-      .filter(([v]) => !v)
-      .map(([, l]) => l as string);
+const LEGS: { key: LegKey; label: string; unit: (v: number) => string }[] = [
+  { key: 'zwem', label: '🏊 1,9 km', unit: (v) => `${fmtPace(v)} /100m` },
+  { key: 'fiets', label: '🚴 90 km', unit: (v) => `${fmtDec(v)} km/u` },
+  { key: 'run', label: '🏃 21,1 km', unit: (v) => `${fmtPace(v)} /km` }
+];
 
-    return (
-      <article className="col-span-full rounded-im-card bg-im-hero p-5 text-white shadow-im-card">
-        <CardTitle onNavy>Geschatte eindtijd — {naam}</CardTitle>
-        <div className="text-[2.4rem] font-extrabold tabular-nums">
-          –:––{' '}
-          <small className="text-[1rem] font-normal text-im-navy-soft">
-            nog niet te berekenen
-          </small>
-        </div>
-        <div className="mt-3 text-[.9rem]">
-          Ik heb afgeronde trainingen met tijd + afstand nodig van elke
-          discipline. Ontbreekt nog: <b>{missing.join(', ') || '?'}</b> (laatste 6
-          weken).
-        </div>
-      </article>
-    );
-  }
-
-  const total = est.total as number;
-  const diff = total - GOAL_MIN;
-  const margin = Math.round(total * 0.04);
-  const gap = biggestGap(est);
+function Hero({ view, naam }: { view: ReturnType<typeof raceView>; naam: string }) {
+  const { today, projected, biggestGap } = view;
 
   return (
     <article className="col-span-full rounded-im-card bg-im-hero p-5 text-white shadow-im-card">
-      <CardTitle onNavy>
-        <span className="flex flex-wrap justify-between gap-2">
-          <span>Geschatte eindtijd — {naam}</span>
-          <span>betrouwbaarheid: {est.conf}</span>
-        </span>
-      </CardTitle>
+      <CardTitle onNavy>Geschatte eindtijd — {naam}</CardTitle>
 
-      <div className="text-[2.4rem] font-extrabold tabular-nums">
-        {fmtHM(total)}{' '}
-        <small className="text-[1rem] font-normal text-im-navy-soft">
-          ± {margin} min · op basis van {allDone} afgeronde trainingen
-        </small>
+      <div className="flex flex-wrap gap-x-10 gap-y-3">
+        <Big label="Als je vandaag racet" est={today} />
+        <Big label="Projectie 18 april" est={projected} />
+        <div className="self-end pb-1 text-[.85rem]">
+          {projected.complete ? (
+            projected.total! <= 300 ? (
+              <span className="font-bold text-im-on-navy-good">
+                Onder de 5 uur. Vasthouden en niet blesseren.
+              </span>
+            ) : (
+              <span>
+                <span className="font-bold text-im-on-navy-bad">
+                  Nog {fmtHM(projected.total! - 300)} te winnen.
+                </span>{' '}
+                {biggestGap && (
+                  <>
+                    Grootste tekort: <b>{LEG_LABEL[biggestGap.key]}</b>.
+                  </>
+                )}
+              </span>
+            )
+          ) : (
+            <span className="text-im-navy-soft">
+              Nog niet compleet — hieronder staat per onderdeel wat er ontbreekt.
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2.5">
-        <Split label="🏊 1.9 km" v={est.parts.zwem!} />
-        <Split label="🚴 90 km" v={est.parts.fiets!} />
-        <Split label="🏃 21.1 km" v={est.parts.run!} />
-        <Split label="🔁 Wissels" v={est.parts.wissels} />
-      </div>
-
-      <div className="mt-3 text-[.9rem]">
-        Doel 5:00 →{' '}
-        {diff <= 0 ? (
-          <span className="font-bold text-im-on-navy-good">
-            je zit er {fmtHM(Math.abs(diff))} onder. Vasthouden.
+      <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5">
+        {LEGS.map((l) => (
+          <LegBox
+            key={l.key}
+            label={l.label}
+            leg={today.legs[l.key]}
+            proj={projected.legs[l.key]}
+            unit={l.unit}
+          />
+        ))}
+        <div className="rounded-im-day bg-white/10 px-3 py-2 text-[.8rem]">
+          🔁 Wissels
+          <b className="block text-[1.05rem] tabular-nums">{fmtHM(today.wissels)}</b>
+          <span className="text-[.7rem] text-im-navy-soft">
+            vaste aanname · 5:00 vraagt {fmtHM(GOAL_SPLITS.wissels)}
           </span>
-        ) : (
-          <span className="font-bold text-im-on-navy-bad">
-            nog {fmtHM(diff)} te winnen.
-          </span>
-        )}{' '}
-        {gap && (
-          <>
-            Grootste winst zit in het <b>{gap}</b>.
-          </>
-        )}
+        </div>
       </div>
     </article>
   );
 }
 
-function Split({ label, v }: { label: string; v: number }) {
+function Big({ label, est }: { label: string; est: Estimate }) {
   return (
-    <div className="min-w-[110px] flex-1 rounded-im-day bg-white/10 px-3 py-2 text-[.8rem]">
-      {label}
-      <b className="block text-[1.05rem] tabular-nums">{fmtHM(v)}</b>
+    <div>
+      <div className="text-[.72rem] uppercase tracking-[1px] text-im-navy-soft">{label}</div>
+      <div className="text-[2.4rem] font-extrabold leading-tight tabular-nums">
+        {est.complete ? fmtHM(est.total!) : '–:––'}
+        {est.complete && (
+          <small className="ml-1.5 text-[1rem] font-normal text-im-navy-soft">
+            ± {Math.round(est.margin!)} min
+          </small>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ================= per discipline ================= */
+function LegBox({
+  label,
+  leg,
+  proj,
+  unit
+}: {
+  label: string;
+  leg: Leg;
+  proj: Leg;
+  unit: (v: number) => string;
+}) {
+  const over = proj.min != null ? proj.min - leg.goal : null;
+  return (
+    <div className="rounded-im-day bg-white/10 px-3 py-2 text-[.8rem]">
+      <div className="flex items-baseline justify-between gap-2">
+        <span>{label}</span>
+        {leg.confidence && (
+          <span className="text-[.68rem] text-im-navy-soft">{leg.confidence}</span>
+        )}
+      </div>
+      {leg.min != null ? (
+        <>
+          <b className="block text-[1.05rem] tabular-nums">
+            {fmtHM(leg.min)}
+            <span className="ml-1 text-[.75rem] font-normal text-im-navy-soft">
+              {unit(leg.pace!)}
+            </span>
+          </b>
+          <span className="block text-[.72rem] text-im-navy-soft">
+            18 apr {fmtHM(proj.min!)} · 5:00 vraagt {fmtHM(leg.goal)}
+            {over != null && (
+              <span className={over > 0.5 ? 'text-im-on-navy-bad' : 'text-im-on-navy-good'}>
+                {' '}
+                ({over > 0 ? '+' : '−'}
+                {Math.round(Math.abs(over))} min)
+              </span>
+            )}
+          </span>
+          <span
+            className="mt-1 block text-[.68rem] leading-snug text-im-navy-soft"
+            title={leg.basis.join(' · ')}
+          >
+            {leg.method} · {leg.basis[0]}
+          </span>
+        </>
+      ) : (
+        <>
+          <b className="block text-[1.05rem]">–:––</b>
+          <span className="block text-[.72rem] text-im-navy-soft">{leg.missing}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ================= per discipline: de fitheidsmaten ================= */
+
+const WEEKS_BACK = 10;
+
+/** Waarde van een anker op elke maandag van de laatste tien weken. */
+function history(
+  state: State,
+  person: Person,
+  pick: (a: ReturnType<typeof anchors>) => Anchor | null
+) {
+  const out: number[] = [];
+  for (let i = WEEKS_BACK - 1; i >= 0; i--) {
+    const v = pick(anchors(state, person, iso(addDays(new Date(), 1 - 7 * i))));
+    if (v) out.push(v.value);
+  }
+  return out;
+}
 
 function DisciplineCard({
   cat,
@@ -199,60 +250,124 @@ function DisciplineCard({
   color: string;
 }) {
   const { state, person } = useStore();
-  const today = todayIso();
-  const i28 = iso(addDays(new Date(), -28));
-  const i56 = iso(addDays(new Date(), -56));
+  // morgen als peildatum: de trainingen van vandaag tellen mee
+  const a = anchors(state, person, iso(addDays(new Date(), 1)));
 
-  const hist = speedsOf(doneWorkouts(state, person, cat)).slice(-10);
-  if (!hist.length) {
+  if (cat === 'run') {
+    const series = history(state, person, (x) => x.runThreshold).map((v) => -v);
     return (
       <Card title={`${emoji} ${naam}`}>
-        <NoData>
-          Nog geen afgeronde {naam.toLowerCase()}-trainingen met tijd en afstand.
-        </NoData>
+        <AnchorStat
+          label="Drempeltempo"
+          a={a.runThreshold}
+          fmt={(v) => `${fmtPace(v)} /km`}
+          need={`${fmtPace(REQUIRED.runThreshold)} /km`}
+        />
+        <AnchorStat label="Tempo in zone 2" a={a.runZ2} fmt={(v) => `${fmtPace(v)} /km`} />
+        <AnchorStat
+          label="Long run (mediaan laatste 3)"
+          a={a.longRunKm}
+          fmt={(v) => `${fmtDec(v)} km`}
+        />
+        <Stat
+          label="Zone 2"
+          value={a.z2.high ? `${a.z2.low ?? '?'}–${a.z2.high} bpm` : 'niet ingesteld'}
+        />
+        {series.length >= 2 ? (
+          <>
+            <Sparkline values={series} color={color} />
+            <Caption>drempeltempo per week, laatste {WEEKS_BACK} weken (omhoog = sneller)</Caption>
+          </>
+        ) : (
+          <Hint>
+            Drempeltempo komt uit threshold- en intervalblokken. Doe er één en vul het tempo per
+            herhaling in — of laat Garmin het doen.
+          </Hint>
+        )}
       </Card>
     );
   }
 
-  const recent = windowAvg(state, person, cat, i28, today);
-  const prev = windowAvg(state, person, cat, i56, i28);
-  const efR = efAvg(state, person, cat, i28, today);
-  const efP = efAvg(state, person, cat, i56, i28);
-  const totalSessions = speedsOf(doneWorkouts(state, person, cat)).length;
+  if (cat === 'fiets') {
+    const series = history(state, person, (x) => x.bikeEndurance);
+    return (
+      <Card title={`${emoji} ${naam}`}>
+        <AnchorStat
+          label="Duursnelheid (windgecorrigeerd)"
+          a={a.bikeEndurance}
+          fmt={(v) => `${fmtDec(v)} km/u`}
+          need={`race ${fmtDec(REQUIRED.bikeKmh)} km/u`}
+        />
+        <AnchorStat label="FTP" a={a.ftp} fmt={(v) => `${Math.round(v)} W`} />
+        {series.length >= 2 ? (
+          <>
+            <Sparkline values={series} color={color} />
+            <Caption>duursnelheid per week, laatste {WEEKS_BACK} weken</Caption>
+          </>
+        ) : (
+          <Hint>
+            Duursnelheid komt uit duurritten van 45+ minuten. Met wind erbij (automatisch via
+            Garmin, of zelf invullen) wordt hij betrouwbaarder.
+          </Hint>
+        )}
+      </Card>
+    );
+  }
 
-  // omhoog moet altijd sneller betekenen, dus tempo's plotten we negatief
-  const series = hist.map((x) =>
-    BETTER[cat as 'run' | 'fiets' | 'zwem'] === 'low' ? -x.v : x.v
-  );
-
+  const series = history(state, person, (x) => x.css).map((v) => -v);
   return (
     <Card title={`${emoji} ${naam}`}>
-      <Stat
-        label="Laatste 4 weken"
-        value={
-          <>
-            {recent ? fmtSpeedCat(recent.v, cat) : '—'}{' '}
-            <TrendMark t={trend(recent?.v ?? null, prev?.v ?? null, cat)} />
-          </>
-        }
+      <AnchorStat
+        label="CSS"
+        a={a.css}
+        fmt={(v) => `${fmtPace(v)} /100m`}
+        need={`${fmtPace(REQUIRED.swimCss)} /100m`}
       />
-      <Stat
-        label="Racedoel"
-        value={fmtSpeedCat(DISC_REF[cat as 'run' | 'fiets' | 'zwem'], cat)}
-      />
-      <Stat
-        label="Efficiëntie (snelheid/hartslag)"
-        value={
-          <>
-            {efR ? fmtDec(efR) : '—'} <TrendMark t={trend(efR, efP, 'fiets')} />
-          </>
-        }
-      />
-      <Stat label="Sessies gelogd" value={String(totalSessions)} />
-      <Sparkline values={series} color={color} />
-      <Caption>verloop laatste {hist.length} sessies (omhoog = sneller)</Caption>
+      {series.length >= 2 ? (
+        <>
+          <Sparkline values={series} color={color} />
+          <Caption>CSS per week, laatste {WEEKS_BACK} weken (omhoog = sneller)</Caption>
+        </>
+      ) : (
+        <Hint>
+          CSS komt uit setherhalingen van 100–400 m. Vul bij een set je tijd per herhaling in.
+        </Hint>
+      )}
     </Card>
   );
+}
+
+function AnchorStat({
+  label,
+  a,
+  fmt,
+  need
+}: {
+  label: string;
+  a: Anchor | null;
+  fmt: (v: number) => string;
+  need?: string;
+}) {
+  return (
+    <div className="border-b border-dashed border-im-hairline py-1.5 text-[.87rem] last:border-b-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <span>{label}</span>
+        <b className="text-right tabular-nums">{a ? fmt(a.value) : '—'}</b>
+      </div>
+      {(a || need) && (
+        <div className="flex justify-between gap-3 text-[.7rem] text-im-muted">
+          <span className="truncate" title={a?.basis.join(' · ')}>
+            {a ? `${a.confidence} · ${a.basis[0] ?? ''}` : ''}
+          </span>
+          {need && <span className="shrink-0">sub-5: {need}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return <p className="mt-2 text-[.78rem] italic leading-snug text-im-muted">{children}</p>;
 }
 
 /* ================= Garmin ================= */
