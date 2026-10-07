@@ -3,6 +3,8 @@ import {
   activityStats,
   activityWind,
   disciplineOf,
+  estimatedFtp,
+  isIndoorRide,
   inferKind,
   intervalsToStructure,
   kmhToBft,
@@ -363,8 +365,8 @@ describe('zonesFromSettings', () => {
   ];
 
   it('haalt zone 2 uit de hardloopzones', () => {
-    expect(zonesFromSettings(real, 185, true)).toMatchObject({
-      hrValid: true, z2Low: 137, z2High: 152, lthr: 172, maxHr: 192, ftp: 230
+    expect(zonesFromSettings(real, 185)).toMatchObject({
+      hrValid: true, z2Low: 137, z2High: 152, lthr: 172, maxHr: 192
     });
   });
 
@@ -374,17 +376,55 @@ describe('zonesFromSettings', () => {
       { types: ['Ride'], ftp: 250 },
       { types: ['Run'], lthr: 200, max_hr: 220, hr_zones: [169, 179, 185, 190, 195, 200, 220] }
     ];
-    const z = zonesFromSettings(defaults, 182, false);
+    const z = zonesFromSettings(defaults, 182);
     expect(z).toMatchObject({ hrValid: false, z2High: null, lthr: null, maxHr: null, ftp: null });
     expect(z.raw).toEqual({ maxHr: 220, lthr: 200, ftp: 250 });
   });
 
-  it('neemt FTP alleen over als je met een wattmeter rijdt', () => {
-    expect(zonesFromSettings(real, 185, false).ftp).toBeNull();
-    expect(zonesFromSettings(real, 185, true).ftp).toBe(230);
+  it('neemt de FTP uit de instellingen nooit over', () => {
+    expect(zonesFromSettings(real, 185).ftp).toBeNull();
   });
 
   it('geeft niets als er geen zones zijn', () => {
     expect(zonesFromSettings([]).z2High).toBeNull();
+  });
+});
+
+/* ================= hometrainer ================= */
+
+const ride = (o: Partial<IcuActivity>): IcuActivity =>
+  run({ type: 'Ride', distance: 40000, moving_time: 5400, average_speed: 7.4, ...o });
+
+describe('hometrainer', () => {
+  it('herkent een rit binnen aan trainer of VirtualRide', () => {
+    expect(isIndoorRide(ride({ trainer: true }))).toBe(true);
+    expect(isIndoorRide(ride({ type: 'VirtualRide' }))).toBe(true);
+    expect(isIndoorRide(ride({}))).toBe(false);
+  });
+
+  it('zet een binnenrit automatisch op binnen, zonder wind', () => {
+    const p = planned({ id: 'f1', type: 'lange_fiets' });
+    const r = matchActivities('tom', [p], [{ act: ride({ id: 'b1', trainer: true }), intervals: null }]);
+    expect(r.upserts[0].id).toBe('f1');
+    expect(r.upserts[0].indoor).toBe(true);
+    expect(r.upserts[0].wind ?? null).toBeNull();
+  });
+
+  it('houdt een met de hand gezet vinkje aan bij een volgende sync', () => {
+    const synced = planned({ id: 'f2', type: 'lange_fiets', externalId: 'b2', source: 'icu', indoor: false, stats: { done: true } });
+    const r = matchActivities('tom', [synced], [{ act: ride({ id: 'b2', trainer: true }), intervals: null }]);
+    expect(r.upserts[0].indoor).toBe(false);
+  });
+
+  it('schat de FTP uit de nieuwste rit met een echte wattmeter', () => {
+    const acts = [
+      ride({ id: 'o', start_date_local: '2026-10-01T08:00:00', device_watts: true, icu_rolling_ftp: 210 }),
+      ride({ id: 'n', start_date_local: '2026-10-08T08:00:00', device_watts: true, icu_rolling_ftp: 221.6 }),
+      // geschat vermogen zonder wattmeter telt niet
+      ride({ id: 'x', start_date_local: '2026-10-09T08:00:00', device_watts: false, icu_rolling_ftp: 250 })
+    ];
+    expect(estimatedFtp(acts)).toBe(222);
+    expect(estimatedFtp([ride({ device_watts: false, icu_rolling_ftp: 250 })])).toBeNull();
+    expect(estimatedFtp([run({ device_watts: true, icu_rolling_ftp: 300 })])).toBeNull();
   });
 });

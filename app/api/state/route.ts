@@ -48,6 +48,7 @@ export async function GET() {
         maxHr: r.maxHr,
         lthr: r.lthr,
         ftp: r.ftp,
+        ftpSource: r.ftpSource,
         z2Source: r.z2Source,
         lastSync: r.lastSync ? r.lastSync.toISOString() : null
       };
@@ -161,7 +162,11 @@ async function upsertSettings(r: any) {
     set.z2Source = set.z2Low == null && set.z2High == null ? null : 'manual';
   }
   if ('maxHr' in r) set.maxHr = int(r.maxHr);
-  if ('ftp' in r) set.ftp = int(r.ftp);
+  if ('ftp' in r) {
+    set.ftp = int(r.ftp);
+    // zelf ingevuld gaat voor de schatting uit je vermogensdata; leeg = weer automatisch
+    set.ftpSource = set.ftp == null ? null : 'manual';
+  }
   await db
     .insert(personSettings)
     .values({ person, ...set })

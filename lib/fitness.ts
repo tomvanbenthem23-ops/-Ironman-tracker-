@@ -290,6 +290,7 @@ export function longRunKm(state: State, person: Person, asOf: string): Anchor | 
  * de rit tegen scheelt dat ±2 km/u op het gemiddelde.
  */
 export function windPenaltyKmh(w: Workout): number {
+  if (w.indoor) return 0; // binnen: geen wind
   const wind = w.wind;
   if (!wind) return 0;
   const kmh = wind.speedKmh ?? (wind.bft != null ? BFT_KMH[wind.bft] : null);
@@ -316,7 +317,8 @@ export function windPenaltyKmh(w: Workout): number {
 /** Duursnelheid uit duurritten van minstens 45 minuten, windgecorrigeerd. */
 export function bikeEndurance(state: State, person: Person, asOf: string) {
   const rides = window(state, person, asOf, 56).filter(
-    (w) => catOf(w) === 'fiets' && kindOf(w) === 'endurance' && (w.stats?.tijdMin ?? 0) >= 45
+    // binnen op de trainer is snelheid gesimuleerd: telt niet mee voor duursnelheid
+    (w) => catOf(w) === 'fiets' && !w.indoor && kindOf(w) === 'endurance' && (w.stats?.tijdMin ?? 0) >= 45
   );
   const xs = rides
     .map((w) => {
@@ -358,7 +360,11 @@ export function ftpAnchor(state: State, person: Person): Anchor | null {
     value: ftp,
     n: 1,
     latest: '',
-    basis: [`FTP ${ftp} W (${state.settings[person]?.z2Source === 'garmin' ? 'uit intervals.icu' : 'ingesteld'})`],
+    basis: [
+      `FTP ${ftp} W (${
+        state.settings[person]?.ftpSource === 'garmin' ? 'geschat uit je vermogensdata' : 'zelf ingevuld'
+      })`
+    ],
     confidence: 'gemiddeld'
   };
 }
@@ -461,8 +467,11 @@ const fmtNum = (v: number) => v.toFixed(1).replace('.', ',');
 
 export function readiness(state: State, person: Person, asOf: string): Readiness {
   const ws = window(state, person, asOf, 56);
-  const dist = (cat: string) =>
-    Math.max(0, ...ws.filter((w) => catOf(w) === cat).map((w) => w.stats?.afstand ?? 0));
+  // een binnenrit telt op duur: minuten × je duursnelheid buiten (anders 27 km/u)
+  const outdoorKmh = bikeEndurance(state, person, asOf).speed?.value ?? 27;
+  const kmOf = (w: Workout) =>
+    w.indoor && w.stats?.tijdMin ? (w.stats.tijdMin / 60) * outdoorKmh : (w.stats?.afstand ?? 0);
+  const dist = (cat: string) => Math.max(0, ...ws.filter((w) => catOf(w) === cat).map(kmOf));
   const recent = window(state, person, asOf, 28).filter((w) => catOf(w) !== 'kracht');
   const hours = recent.reduce((s, w) => s + (w.stats?.tijdMin ?? 0), 0) / 60 / 4;
   const days = new Map<string, Set<string>>();

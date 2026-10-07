@@ -27,6 +27,7 @@ export function rowToWorkout(r: SelectWorkout) {
     structure: r.structure ?? null,
     plan: r.plan ?? null,
     wind: r.wind ?? null,
+    indoor: r.indoor ?? null,
     source: r.source === 'icu' ? 'icu' : 'manual',
     externalId: r.externalId ?? null
   };
@@ -52,6 +53,7 @@ export function workoutToRow(w: any) {
     structure: Array.isArray(w.structure) && w.structure.length ? w.structure : null,
     plan: w.plan ?? null,
     wind: w.wind ?? null,
+    indoor: typeof w.indoor === 'boolean' ? w.indoor : null,
     source: w.source === 'icu' ? 'icu' : 'manual',
     externalId: w.externalId ? String(w.externalId) : null,
     updatedAt: new Date()

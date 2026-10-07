@@ -42,6 +42,7 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
   const [bft, setBft] = useState('');
   const [windDir, setWindDir] = useState<WindDir | ''>('');
   const [headKm, setHeadKm] = useState('');
+  const [indoor, setIndoor] = useState(false);
   const [datum, setDatum] = useState('');
   const [confirmDel, setConfirmDel] = useState(false);
 
@@ -69,6 +70,7 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
     setBft(w.wind?.bft != null ? String(w.wind.bft) : '');
     setWindDir(w.wind?.dir ?? '');
     setHeadKm(w.wind?.headKm != null ? String(w.wind.headKm) : '');
+    setIndoor(!!w.indoor);
     setDatum(w.date);
     setConfirmDel(false);
   }, [id, w]);
@@ -136,7 +138,9 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
     if (t!.cat === 'fiets') stats.vermogen = parseNum(vermogen);
 
     let wind: Wind | null = w!.wind ?? null;
-    if (t!.cat === 'fiets' && !autoWind) {
+    if (t!.cat === 'fiets' && indoor) {
+      wind = null; // binnen: geen wind
+    } else if (t!.cat === 'fiets' && !autoWind) {
       const b = parseNum(bft);
       wind =
         b == null && !windDir
@@ -149,6 +153,7 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
       kind,
       structure: rowsToBlocks(rows, w!.type),
       wind,
+      indoor: t!.cat === 'fiets' ? indoor : null,
       date: datum || w!.date
     });
     onClose();
@@ -346,7 +351,23 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
               </div>
             )}
 
+            {t.cat === 'fiets' && (
+              <label className="mb-2.5 flex items-center gap-2 text-[.9rem] font-semibold">
+                <input
+                  type="checkbox"
+                  checked={indoor}
+                  onChange={(e) => setIndoor(e.target.checked)}
+                  className="h-[18px] w-[18px]"
+                />
+                🏠 Binnen (hometrainer)
+                <span className="text-[.75rem] font-normal text-im-muted">
+                  geen wind; snelheid telt niet mee, vermogen wel
+                </span>
+              </label>
+            )}
+
             {t.cat === 'fiets' &&
+              !indoor &&
               (autoWind ? (
                 <div className="mb-2.5 rounded-im-ctl bg-[#f0f4f8] px-2.5 py-2 text-[.85rem]">
                   💨 {w.wind?.bft != null && <>{w.wind.bft} Bft · </>}

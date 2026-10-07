@@ -163,7 +163,9 @@ function bikeLeg(state: State, person: Person, a: Anchors, r: Readiness): Leg {
     return {
       ...base, min: null, pace: null, confidence: null, basis: [],
       method: 'duursnelheid × raceklaar',
-      missing: 'Rijd een duurrit van minstens 45 minuten.'
+      missing: a.ftp
+        ? 'Vul je gewicht in (dashboard → Garmin-kaart) voor een schatting op vermogen, of rijd een duurrit buiten van 45+ minuten.'
+        : 'Rijd een duurrit van minstens 45 minuten.'
     };
   }
   const uplift = 1 + 0.12 * r.bike;

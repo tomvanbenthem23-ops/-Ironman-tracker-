@@ -69,6 +69,8 @@ export type Workout = {
   /** Bevroren voorschrift; zolang dit leeg is wordt het live berekend. */
   plan?: unknown;
   wind?: Wind | null;
+  /** Fietsrit binnen op de hometrainer: geen wind, snelheid zegt niets. */
+  indoor?: boolean | null;
   source?: 'manual' | 'icu';
   externalId?: string | null;
 };
@@ -86,6 +88,8 @@ export type PersonSettings = {
   maxHr?: number | null;
   lthr?: number | null;
   ftp?: number | null;
+  /** 'garmin' = geschat uit je vermogensdata (intervals.icu), 'manual' = zelf ingevuld. */
+  ftpSource?: 'garmin' | 'manual' | null;
   /** 'garmin' = uit intervals.icu overgenomen, 'manual' = zelf ingevuld. */
   z2Source?: 'garmin' | 'manual' | null;
   lastSync?: string | null;

@@ -24,6 +24,7 @@ import {
 import { anchors, type Anchor } from '@/lib/fitness';
 import { REQUIRED } from '@/lib/prescribe';
 import { LEG_LABEL, raceSummary, raceView, type Estimate, type Leg, type LegKey } from '@/lib/race';
+import { goalView, type GoalLeg, type Verdict } from '@/lib/goal';
 import { useStore } from '@/lib/store';
 import type { Discipline, Person, State } from '@/lib/types';
 import { Bars, Caption, NoData, Sparkline } from './charts';
@@ -46,6 +47,7 @@ export function Dashboard() {
   return (
     <section className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-3.5 px-6 pb-10 pt-4">
       <Hero view={view} naam={naam} />
+      <GoalCard />
 
       {DISCIPLINES.map((d) => (
         <DisciplineCard key={d.cat} {...d} />
@@ -229,6 +231,102 @@ function LegBox({
         </>
       )}
     </div>
+  );
+}
+
+/* ================= wat 5:00 vraagt ================= */
+
+const VERDICT_UI: Record<Verdict, { label: string; cls: string }> = {
+  met: { label: '✓ al op niveau', cls: 'text-im-good' },
+  realistic: { label: 'realistisch', cls: 'text-im-good' },
+  ambitious: { label: 'ambitieus', cls: 'text-im-warn' },
+  unlikely: { label: 'onwaarschijnlijk', cls: 'text-im-bad' },
+  missing: { label: 'nog geen meting', cls: 'text-im-muted' }
+};
+
+const GOAL_LABEL: Record<LegKey, string> = { zwem: '🏊 CSS', fiets: '🚴 Fiets', run: '🏃 Drempeltempo' };
+
+function fmtGoalValue(v: number, unit: GoalLeg['unit']) {
+  if (unit === 'pace100') return `${fmtPace(v)} /100m`;
+  if (unit === 'pacekm') return `${fmtPace(v)} /km`;
+  if (unit === 'watt') return `${Math.round(v)} W FTP`;
+  return `${fmtDec(v)} km/u`;
+}
+
+const pctTxt = (v: number, d = 1) => `${fmtDec(v * 100, d)}%`;
+
+function GoalCard() {
+  const { state, person } = useStore();
+  const g = useMemo(() => goalView(state, person), [state, person]);
+
+  return (
+    <Card title="🎯 Wat 5:00 vraagt" full>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-[.87rem]">
+          <thead>
+            <tr className="text-left text-[.7rem] uppercase tracking-[.5px] text-im-muted">
+              <th className="py-1 font-semibold" />
+              <th className="py-1 font-semibold">Nu</th>
+              <th className="py-1 font-semibold">5:00 vraagt</th>
+              <th className="py-1 font-semibold">Sneller nodig</th>
+              <th className="py-1 font-semibold">Per week tot 5 april</th>
+              <th className="py-1 font-semibold">Oordeel</th>
+            </tr>
+          </thead>
+          <tbody>
+            {g.legs.map((l) => (
+              <tr key={l.key} className="border-t border-dashed border-im-hairline">
+                <td className="py-1.5 font-semibold">
+                  {l.key === 'fiets' && l.unit === 'kmh' ? '🚴 Duursnelheid' : GOAL_LABEL[l.key]}
+                </td>
+                <td className="py-1.5 tabular-nums">{l.now != null ? fmtGoalValue(l.now, l.unit) : '—'}</td>
+                <td className="py-1.5 tabular-nums">{fmtGoalValue(l.need, l.unit)}</td>
+                <td className="py-1.5 tabular-nums">
+                  {l.gap == null ? '—' : l.gap <= 0 ? '—' : `+${pctTxt(l.gap)}`}
+                </td>
+                <td className="py-1.5 tabular-nums">
+                  {l.perWeek == null ? '—' : l.perWeek <= 0 ? '—' : `+${pctTxt(l.perWeek, 2)}`}
+                </td>
+                <td className={`py-1.5 font-semibold ${VERDICT_UI[l.verdict].cls}`}>
+                  {VERDICT_UI[l.verdict].label}
+                  {l.missing && <span className="block text-[.72rem] font-normal">{l.missing}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-[.9rem] leading-relaxed">
+        {g.realistic != null ? (
+          <>
+            Als je het schema volgt: <b>realistisch doel {fmtHM(g.realistic)}</b>, ambitieus{' '}
+            <b>{fmtHM(g.ambitious!)}</b>.{' '}
+          </>
+        ) : (
+          <>Voor een doel mis ik nog een meting per onderdeel. </>
+        )}
+        {g.hardest && (
+          <>
+            5:00 vraagt het meest in het <b>{LEG_LABEL[g.hardest.key]}</b>: +
+            {pctTxt(g.hardest.perWeek!, 2)} per week, {g.weeks.toFixed(0)} weken lang.
+          </>
+        )}
+      </p>
+
+      <details className="mt-2 text-[.78rem] leading-relaxed text-im-muted">
+        <summary className="cursor-pointer font-semibold text-im-ink">Waar komen deze grenzen vandaan?</summary>
+        <p className="mt-1.5">
+          Alles is omgerekend naar snelheid, tot de taper op 5 april. Wat per week haalbaar is:
+          zwemmen realistisch 0,30% / ambitieus 0,60% (bij beginnende zwemmers levert techniek
+          veel op), lopen 0,25% / 0,50%, fietsen 0,20% / 0,35%. Fietssnelheid groeit maar met de
+          derdemachtswortel van je vermogen, omdat luchtweerstand kwadratisch toeneemt: 15% sneller
+          vraagt ±50% meer vermogen. Het doel gaat uit van volledige raceklaarheid (het schema
+          volgen) en neemt bij een onderdeel dat al op 5:00-niveau is geen extra groei aan. Dit
+          zijn aannames, geen garanties.
+        </p>
+      </details>
+    </Card>
   );
 }
 

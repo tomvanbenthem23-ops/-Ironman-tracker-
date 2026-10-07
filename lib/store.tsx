@@ -33,7 +33,7 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'loaded' | 'error';
 type PendingWrite = { id: string; body: any };
 
 export type WorkoutPatch = Partial<
-  Pick<Workout, 'date' | 'stats' | 'kind' | 'structure' | 'wind' | 'plan'>
+  Pick<Workout, 'date' | 'stats' | 'kind' | 'structure' | 'wind' | 'plan' | 'indoor'>
 >;
 
 type Ctx = {
@@ -290,6 +290,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setState((s) => {
         const cur = s.settings[person] ?? {};
         const next: PersonSettings = { ...cur, ...patch };
+        if ('ftp' in patch) next.ftpSource = patch.ftp == null ? null : 'manual';
         if ('z2Low' in patch || 'z2High' in patch) {
           next.z2Source = next.z2Low == null && next.z2High == null ? null : 'manual';
         }

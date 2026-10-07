@@ -8,6 +8,7 @@ import {
   matchActivities,
   wellnessToWeeks,
   zonesFromSettings,
+  estimatedFtp,
   type IcuInterval
 } from '@/lib/icu-map';
 import { PERSONS, TYPES } from '@/lib/config';
@@ -130,8 +131,9 @@ async function syncPerson(person: Person, rebuild = false) {
   const observedMax = robustMax(
     all.filter((w) => TYPES[w.type]?.cat === 'run' && w.stats?.maxHr).map((w) => w.stats.maxHr!)
   );
-  const hasPower = all.some((w) => TYPES[w.type]?.cat === 'fiets' && w.source === 'icu' && w.stats?.vermogen);
-  const zones = zonesFromSettings(await sportSettings(creds).catch(() => []), observedMax, hasPower);
+  const zones = zonesFromSettings(await sportSettings(creds).catch(() => []), observedMax);
+  // FTP uit je eigen vermogensdata (hometrainer of wattmeter), niet de standaard van het account
+  const eftp = estimatedFtp(acts);
 
   const set: Record<string, unknown> = { lastSync: new Date(), updatedAt: new Date() };
   if (settingRow?.z2Source !== 'manual') {
@@ -150,8 +152,14 @@ async function syncPerson(person: Person, rebuild = false) {
   else if (settingRow?.lthr && settingRow.lthr === zones.raw.lthr) set.lthr = null;
   if (zones.maxHr && !settingRow?.maxHr) set.maxHr = zones.maxHr;
   else if (!zones.hrValid && settingRow?.maxHr && settingRow.maxHr === zones.raw.maxHr) set.maxHr = null;
-  if (zones.ftp && !settingRow?.ftp) set.ftp = zones.ftp;
-  else if (!hasPower && settingRow?.ftp && settingRow.ftp === zones.raw.ftp) set.ftp = null;
+  if (settingRow?.ftpSource !== 'manual') {
+    if (eftp) {
+      set.ftp = eftp;
+      set.ftpSource = 'garmin';
+    } else if (!settingRow?.ftpSource && settingRow?.ftp && settingRow.ftp === zones.raw.ftp) {
+      set.ftp = null; // eerder overgenomen standaard-FTP
+    }
+  }
   await db
     .insert(personSettings)
     .values({ person, ...set })

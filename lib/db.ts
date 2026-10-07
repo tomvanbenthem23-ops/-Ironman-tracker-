@@ -41,6 +41,7 @@ export const workouts = pgTable('workouts', {
   structure: jsonb('structure'),
   plan: jsonb('plan'),
   wind: jsonb('wind'),
+  indoor: boolean('indoor'),
   source: text('source').notNull().default('manual'),
   externalId: text('external_id'),
   updatedAt: timestamp('updated_at').notNull().defaultNow()
@@ -79,6 +80,7 @@ export const personSettings = pgTable('person_settings', {
   maxHr: integer('max_hr'),
   lthr: integer('lthr'),
   ftp: integer('ftp'),
+  ftpSource: text('ftp_source'),
   z2Source: text('z2_source'),
   lastSync: timestamp('last_sync'),
   updatedAt: timestamp('updated_at').notNull().defaultNow()
@@ -161,6 +163,7 @@ export async function migrate() {
     sql`ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual'`
   );
   await db.execute(sql`ALTER TABLE workouts ADD COLUMN IF NOT EXISTS external_id text`);
+  await db.execute(sql`ALTER TABLE workouts ADD COLUMN IF NOT EXISTS indoor boolean`);
   await db.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS workouts_external_id_idx
       ON workouts (external_id) WHERE external_id IS NOT NULL`);
@@ -173,10 +176,12 @@ export async function migrate() {
       max_hr integer,
       lthr integer,
       ftp integer,
+      ftp_source text,
       z2_source text,
       last_sync timestamp,
       updated_at timestamp NOT NULL DEFAULT now()
     )`);
+  await db.execute(sql`ALTER TABLE person_settings ADD COLUMN IF NOT EXISTS ftp_source text`);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS week_flags (
       week text PRIMARY KEY,

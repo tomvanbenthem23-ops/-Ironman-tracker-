@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readiness, readinessFrom } from './fitness';
+import { bikeEndurance, readiness, readinessFrom, windPenaltyKmh } from './fitness';
 import {
   beyondLongest,
   estimateAt,
@@ -169,5 +169,33 @@ describe('raceSummary', () => {
   it('zegt wat er ontbreekt', () => {
     const v = raceView(state([]), 'tom', '2026-10-07');
     expect(raceSummary(v, 'Tom', null, 0, 1)).toContain('mis ik nog');
+  });
+});
+
+describe('binnen fietsen', () => {
+  const windy = { bft: 5, dir: 'tegen' as const };
+
+  it('rekent binnen geen wind', () => {
+    const out = wo({ type: 'lange_fiets', date: '2026-10-01', wind: windy, stats: { done: true, afstand: 50, tijdMin: 120 } });
+    expect(windPenaltyKmh(out)).toBeGreaterThan(0);
+    expect(windPenaltyKmh({ ...out, indoor: true })).toBe(0);
+  });
+
+  it('telt de snelheid van een binnenrit niet mee voor de duursnelheid', () => {
+    const s = state([
+      wo({ type: 'lange_fiets', date: '2026-10-01', stats: { done: true, afstand: 54, tijdMin: 120 } }),
+      wo({ type: 'lange_fiets', date: '2026-10-04', indoor: true, stats: { done: true, afstand: 70, tijdMin: 120 } })
+    ]);
+    expect(bikeEndurance(s, 'tom', '2026-10-07').speed!.value).toBeCloseTo(27, 6);
+    expect(bikeEndurance(s, 'tom', '2026-10-07').speed!.n).toBe(1);
+  });
+
+  it('telt een binnenrit voor de raceklaarheid op duur × je snelheid buiten', () => {
+    const s = state([
+      wo({ type: 'lange_fiets', date: '2026-10-01', stats: { done: true, afstand: 30, tijdMin: 60 } }),
+      wo({ type: 'lange_fiets', date: '2026-10-04', indoor: true, stats: { done: true, afstand: 120, tijdMin: 150 } })
+    ]);
+    // buiten 30 km/u; 150 min binnen = 75 km, niet de 120 km van de trainer
+    expect(readiness(s, 'tom', '2026-10-07').bikeLongKm).toBeCloseTo(75, 6);
   });
 });

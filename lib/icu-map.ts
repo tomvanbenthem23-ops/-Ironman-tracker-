@@ -26,6 +26,8 @@ export type IcuActivity = {
   icu_average_watts?: number | null;
   device_watts?: boolean | null;
   trainer?: boolean | null;
+  /** Schatting van je FTP door intervals.icu, uit je vermogensdata tot en met deze rit. */
+  icu_rolling_ftp?: number | null;
   icu_rpe?: number | null;
   perceived_exertion?: number | null;
   average_wind_speed?: number | null;
@@ -309,6 +311,23 @@ export function activityWind(act: IcuActivity): Wind | null {
   };
 }
 
+/** Rit binnen: op de trainer (of in Zwift e.d.). Daar is geen wind en zegt snelheid niets. */
+export const isIndoorRide = (act: IcuActivity) =>
+  !!act.trainer || act.type === 'VirtualRide';
+
+/**
+ * FTP-schatting uit je eigen vermogensdata: de nieuwste rit met een echte
+ * wattmeter (bv. de hometrainer) waarvoor intervals.icu een rollende FTP
+ * berekende. Dat is iets anders dan de FTP in de instellingen van een nieuw
+ * account (standaard 250): die gebruiken we niet.
+ */
+export function estimatedFtp(acts: IcuActivity[]): number | null {
+  const withPower = acts
+    .filter((a) => disciplineOf(a.type) === 'fiets' && a.device_watts && (a.icu_rolling_ftp ?? 0) > 0)
+    .sort((a, b) => (a.start_date_local < b.start_date_local ? 1 : -1));
+  return withPower.length ? Math.round(withPower[0].icu_rolling_ftp!) : null;
+}
+
 /* ================= koppelen aan de planning ================= */
 
 /** Gelijkmatige trainingen: daar hoort geen opbouw bij, hoe veel rondes het horloge ook maakte. */
@@ -356,6 +375,7 @@ export function matchActivities(
     const kind = inferKind(act, cat, structure);
     const stats = activityStats(act, cat);
     const wind = cat === 'fiets' ? activityWind(act) : null;
+    const autoIndoor = cat === 'fiets' ? isIndoorRide(act) : null;
     const extId = String(act.id);
 
     const prior = byExt.get(extId);
@@ -372,7 +392,9 @@ export function matchActivities(
           : intervals
             ? structure
             : (prior.structure ?? null),
-        wind: wind ?? prior.wind ?? null,
+        // zelf omgezet (binnen/buiten) gaat voor wat Garmin zegt
+        indoor: prior.indoor ?? autoIndoor,
+        wind: (prior.indoor ?? autoIndoor) ? null : (wind ?? prior.wind ?? null),
         source: 'icu',
         externalId: extId
       });
@@ -401,7 +423,8 @@ export function matchActivities(
         stats: { ...stats, rpe: target.stats?.rpe ?? stats.rpe },
         kind: target.kind ?? null,
         structure: STEADY.includes(kindOf(target)) ? null : (structure ?? target.structure ?? null),
-        wind: wind ?? target.wind ?? null,
+        indoor: target.indoor ?? autoIndoor,
+        wind: (target.indoor ?? autoIndoor) ? null : (wind ?? target.wind ?? null),
         source: 'icu',
         externalId: extId
       });
@@ -417,7 +440,8 @@ export function matchActivities(
       stats,
       kind,
       structure: STEADY.includes(kind) ? null : structure,
-      wind,
+      wind: autoIndoor ? null : wind,
+      indoor: autoIndoor,
       source: 'icu',
       externalId: extId
     });
@@ -464,12 +488,11 @@ export function wellnessToWeeks(
  * nemen we niet over:
  * - hartslag: alleen als max-HR geloofwaardig is tegenover de hoogste hartslag
  *   die je werkelijk haalde (hooguit 25 erboven) en het omslagpunt eronder ligt;
- * - FTP: alleen als je echt met een wattmeter rijdt.
+ * - FTP: nooit uit de instellingen; die komt uit je ritten (estimatedFtp).
  */
 export function zonesFromSettings(
   list: IcuSportSettings[],
-  observedMaxHr: number | null = null,
-  hasPower = false
+  observedMaxHr: number | null = null
 ) {
   const run = list.find((s) => s.types?.includes('Run'));
   const ride = list.find((s) => s.types?.includes('Ride'));
@@ -489,7 +512,9 @@ export function zonesFromSettings(
     z2High: zonesValid ? z![1] : null,
     lthr: hrValid ? lthr : null,
     maxHr: hrValid ? max : null,
-    ftp: hasPower ? (ride?.ftp ?? null) : null,
+    // de FTP uit de instellingen is bij een nieuw account een standaardwaarde; de echte
+    // schatting komt uit je ritten (estimatedFtp)
+    ftp: null as number | null,
     /** De ruwe waarden, om eerder overgenomen standaardwaarden te kunnen opruimen. */
     raw: { maxHr: max, lthr, ftp: ride?.ftp ?? null }
   };

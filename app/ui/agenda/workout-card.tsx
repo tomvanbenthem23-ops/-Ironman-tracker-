@@ -41,13 +41,14 @@ export function WorkoutCard({ w, onOpen }: { w: Workout; onOpen: () => void }) {
     if (s.tijdMin) meta.push(fmtTijd(s.tijdMin));
     const spd = derivedSpeed(w);
     // bij een gestructureerde training zegt het ritgemiddelde weinig: de blokken staan eronder
-    if (spd != null && !structure) meta.push(fmtSpeed(spd, w.type));
+    if (spd != null && !structure && !w.indoor) meta.push(fmtSpeed(spd, w.type));
+    if (w.indoor && s.vermogen) meta.push(`${s.vermogen} W`);
     if (s.gemHr) meta.push(`♥ ${s.gemHr}`);
   }
 
   // soort alleen tonen als die afwijkt van wat het type al zegt
   const showKind = !isKracht && w.kind && w.kind !== DEFAULT_KIND[w.type];
-  const wind = t.cat === 'fiets' && done ? w.wind : null;
+  const wind = t.cat === 'fiets' && done && !w.indoor ? w.wind : null;
 
   return (
     <button
@@ -68,6 +69,7 @@ export function WorkoutCard({ w, onOpen }: { w: Workout; onOpen: () => void }) {
       {done ? '✅ ' : ''}
       {t.label}
       {showKind && <span className="font-normal"> · {KIND_SHORT[kind]}</span>}
+      {w.indoor && <span title="binnen op de hometrainer"> 🏠</span>}
       {w.source === 'icu' && <span title="uit Garmin"> ⌚</span>}
       {verdict && (
         <span className={`ml-1 ${VERDICT[verdict.verdict].cls}`} aria-label={`oordeel: ${verdict.verdict}`}>
