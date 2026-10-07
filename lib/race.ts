@@ -337,7 +337,7 @@ export function raceSummary(
   if (today.complete && projected.complete) {
     bits.push(
       `Als je vandaag zou racen: <b>${fmtHM(today.total!)}</b> (± ${Math.round(today.margin!)} min). ` +
-        `Blijf je trainen zoals de laatste vier weken, dan kom je op 18 april rond <b>${fmtHM(projected.total!)}</b>.`
+        `Volg je het schema even trouw als de laatste vier weken — inclusief de langere ritten en bricks — dan kom je op 18 april rond <b>${fmtHM(projected.total!)}</b>.`
     );
     const r = today.readiness;
     if (r.bike < 0.75) {

@@ -103,7 +103,7 @@ function Hero({ view, naam }: { view: ReturnType<typeof raceView>; naam: string 
         <Big
           label="Projectie 18 april"
           est={projected}
-          sub={`als je blijft trainen zoals de laatste 4 weken (${Math.round(view.adherence * 100)}% trouw)`}
+          sub={`als je het schema volgt — langere ritten, bricks — even trouw als de laatste 4 weken (${Math.round(view.adherence * 100)}%)`}
         />
         <div className="self-end pb-1 text-[.85rem]">
           {projected.complete ? (

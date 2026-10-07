@@ -220,7 +220,7 @@ Actions: `Sluit`, delete (`🗑` → `Zeker weten?`), `Opslaan`.
 
 All cards are scoped to the selected person.
 
-**Finish-time card** (full width, navy). Heading `Geschatte eindtijd — <Naam>`. Two large numbers side by side: `Als je vandaag racet` and `Projectie 18 april`, each `h:mm ± n min`. Next to them: `Onder de 5 uur. Vasthouden en niet blesseren.` or `Nog 0:14 te winnen. Grootste tekort: <onderdeel>.` Below, one box per leg (`🏊 1,9 km`, `🚴 90 km`, `🏃 21,1 km`): today's time and race pace, confidence, `18 apr <time> · 5:00 vraagt <split>` with the difference in minutes, and the method plus what it rests on. A leg without data shows `–:––` and what to do to get one. A fourth box shows the 8-minute transitions as a fixed assumption.
+**Finish-time card** (full width, navy). Heading `Geschatte eindtijd — <Naam>`. Two large numbers side by side: `Als je vandaag racet` and `Projectie 18 april`, each `h:mm ± n min`. Next to them: `Onder de 5 uur. Vasthouden en niet blesseren.` or `Nog 0:14 te winnen. Grootste tekort: <onderdeel>.` The projection carries the subline `als je het schema volgt — langere ritten, bricks — even trouw als de laatste 4 weken (n%)`. Below, one box per leg (`🏊 1,9 km`, `🚴 90 km`, `🏃 21,1 km`): today's time and race pace, confidence, `18 apr <time> · 5:00 vraagt <split>` with the difference in minutes, `Raceklaar n%` (green ≥ 75%) with its explanation, and the method plus what it rests on. A leg without data shows `–:––` and what to do to get one. A fourth box shows the 8-minute transitions as a fixed assumption.
 
 **Three discipline cards** showing fitness markers instead of session averages:
 - `🏃 Lopen` — `Drempeltempo` (with confidence, basis, and `sub-5: 4:15 /km`), `Tempo in zone 2`, `Long run (mediaan laatste 3)`, `Zone 2` range; sparkline of the threshold marker per week over the last 10 weeks (up = faster).
@@ -230,7 +230,7 @@ Each card explains in one line where its marker comes from when there is no hist
 
 **Volume & discipline card** — `Uren afgelopen week`, `Consistentie (afgevinkt van gepland)`, `Trainingsload-trend`, weekly-hours bars over the last 12 weeks, captioned `… zonder kracht`.
 
-**Garmin card** — `⌚ Garmin (automatisch)` for a connected person (`via intervals.icu · laatst opgehaald …`, values still overridable), otherwise `⌚ Garmin check-in (wekelijks)`. Inputs for the current week: `VO2max`, `Rust-HR`, `Gewicht`; VO2max sparkline once two values exist. Below: `Zone 2 (long runs)` with `Van`/`Tot` bpm and `FTP (W)`, labelled `uit je Garmin-zones` / `zelf ingevuld` / `nog niet ingesteld`. Editing zone 2 by hand marks it manual; the sync then leaves it alone.
+**Garmin card** — `⌚ Garmin (automatisch)` for a connected person (`via intervals.icu · laatst opgehaald …`, values still overridable), otherwise `⌚ Garmin check-in (wekelijks)`. Inputs for the current week: `VO2max`, `Rust-HR`, `Gewicht`; VO2max sparkline once two values exist. Below: `Max-HR en zone 2` with `Max-HR`, `Van`/`Tot` bpm and `FTP (W)`, labelled `zone 2 uit je Garmin-zones` / `zone 2 zelf ingevuld` / `zone 2 = 60–70% van max: …` / `nog niet ingesteld`. Editing zone 2 by hand marks it manual; the sync then leaves it alone.
 
 **Side-activities card** — `🧾 Neven-activiteiten (laatste N wkn)` with 12-week sums of 🧘/🍺/🍆 and `🐼 Panda counter` (signed).
 
@@ -268,8 +268,8 @@ These are the failure-prone parts. Implement them precisely; they are deliberate
 
 Computed per person **from completed sessions strictly before a reference date**. Prescriptions use the session's own date, so past prescriptions stay fixed while future ones move with fitness. Each marker carries its value, the number of sessions, the latest date, the sessions it rests on (for display) and a confidence: `hoog` (≥3 sessions, newest ≤21 days), `gemiddeld` (≥2, ≤35 days), else `laag`.
 
-- **Zone 2**: from settings; if absent but a max HR is known, 60–70% of max HR.
-- **Run threshold pace** (≈ one-hour race pace): from structured run blocks in the last 56 days, each block's average realised pace converted to one hour with **Riegel**: `pace × (60 / totalWorkMinutes)^0.06` — 2 × 20 min counts as 40 min, 6 × 800 m as ±19 min. Recency-weighted over the last four blocks. Without blocks: from **pace and heart rate** — speed scales roughly linearly with heart-rate reserve, so each run ≥ 20 min with an average HR gives `pace ÷ min(1.35, (LTHR − RHR) / (HR − RHR))`; median of the last five (42 days), confidence at most `gemiddeld`. LTHR from settings, else 92% of max HR, else 92% of the highest HR seen in runs of the last 90 days (≥ 3 runs); RHR = latest Garmin value, else 55. Only without heart rate: the fastest one-hour equivalent of any run ≥ 20 min, confidence `laag`. (Taking the fastest training run alone badly underestimates someone whose runs were all easy.)
+- **Zone 2**: from settings; if absent but a max HR is known, 60–70% of max HR (Garmin's default split).
+- **Run threshold pace** (≈ one-hour race pace): from structured run blocks in the last 56 days, each block's average realised pace converted to one hour with **Riegel**: `pace × (60 / totalWorkMinutes)^0.06` — 2 × 20 min counts as 40 min, 6 × 800 m as ±19 min. Recency-weighted over the last four blocks. Without blocks: from **pace and heart rate** — speed scales roughly linearly with heart-rate reserve. Each run ≥ 20 min at ≥ 50% of heart-rate reserve gives `pace ÷ min(1.25, 1 / frac)` with `frac = (HR − RHR) / (LTHR − RHR)`; the last six (42 days) are averaged with weight `frac³`, so one run near threshold counts far more than easy runs that would need a long extrapolation. Confidence at most `gemiddeld`. **Max HR** = settings, else the *middle of the three highest* run peaks of the last 90 days (one optical-sensor spike must not count). **LTHR** = settings if below max HR, else 90% of max HR (deliberately cautious: a too-high LTHR makes the threshold too fast). RHR = latest Garmin value, else 55. Only without heart rate: the fastest one-hour equivalent of any run ≥ 20 min, confidence `laag`. (Taking the fastest training run alone badly underestimates someone whose runs were all easy.)
 - **Run zone-2 pace**: long/easy runs in the last 42 days whose average HR was ≤ zone-2 top + 2, recency-weighted.
 - **Long-run length**: median of the last three long runs (42 days).
 - **Bike endurance speed**: endurance rides ≥ 45 min in the last 56 days, last six, recency-weighted, **wind-corrected**: `+ 0.25 × windKmh × (headShare − 0.7 × tailShare)` (headwind costs more than tailwind gives). Shares come from the km head/tail when known, else from the manual direction (tegen 0.7/0.2, mee 0.2/0.7, otherwise 0.4/0.4); wind speed from the ride or from the Beaufort midpoint. Without any wind data the confidence is capped at `gemiddeld`.
@@ -304,19 +304,30 @@ Only for done sessions. Each check yields hit / close / miss; the session's verd
 - **Blocks**: average realised pace vs target — as good or better → hit, within 3% → close; fewer reps than prescribed: one short → close, more → miss.
 - Nothing measurable (only checked off) → hit with note "afgevinkt".
 
-### 8.6 Finish-time model
+### 8.6 Race readiness
+
+Speed alone does not say you can last five hours: someone who never rode further than 50 km or never ran off the bike will not hold the pace their short sessions suggest. Readiness measures, over the last 8 weeks (volume over 4), how much of the race load has been done: longest ride vs 90 km, longest run vs 18 km, longest swim vs 1,900 m, endurance hours per week (strength excluded) vs 8, and **bricks** (a ride and a run on the same day) vs 3. Per leg, 0…1:
+- bike = 0.7 × ride + 0.3 × volume
+- run = 0.35 × ride + 0.3 × run + 0.2 × volume + 0.15 × bricks
+- swim = swim
+
+Each with a one-line explanation shown on the dashboard (`langste rit 51 km (race 90 km) · 4,7 u/week`, `… · nog nooit van de fiets af gelopen`).
+
+**Adherence** = (completed ÷ planned endurance sessions, last 4 weeks) × min(1, sessions per week ÷ 5).
+
+### 8.7 Finish-time model
 
 Per leg from the markers of 8.3 (reference date = tomorrow, so today's sessions count):
-- **Swim 1.9 km**: race pace = `(CSS + 4 s) × 1.03 × 0.95` (open-water sighting and chop; wetsuit — Valencia mid-April is 15–18 °C).
-- **Bike 90 km**: with FTP and a known weight: speed on flat ground at **76% FTP** (CdA 0.30, Crr 0.005, ρ 1.225, 3% drivetrain loss, bike 9 kg). Otherwise **wind-corrected endurance speed × 1.12** (race intensity ±8% above zone 2, plus closed roads, no stops, aero position, taper).
-- **Run 21.1 km**: `threshold ÷ 0.88` (70.3 runs sit at ±86–91% of threshold speed off the bike). Without a threshold marker: zone-2 pace × 0.90, confidence `laag`.
+- **Swim 1.9 km**: race pace = `(CSS + 4 s) × 1.03 × 0.95` (open-water sighting and chop; wetsuit — Valencia mid-April is 15–18 °C) × `(1 + 0.04 × (1 − readiness))`.
+- **Bike 90 km**: with FTP and a known weight: speed on flat ground at **(68 + 8 × readiness)% of FTP** (CdA 0.30, Crr 0.005, ρ 1.225, 3% drivetrain loss, bike 9 kg). Otherwise **wind-corrected endurance speed × (1 + 0.12 × readiness)** — the full +12% (race intensity ±8% above zone 2, closed roads, no stops, aero, taper) only for someone used to the distance. On top, fatigue for the part beyond the longest ride: time × `(90 / longestKm)^0.05`.
+- **Run 21.1 km**: `threshold ÷ 0.88` (≈ marathon pace — how well-prepared age-groupers run the 70.3 half marathon, 5–10% slower than an open half) × `(1 + 0.20 × (1 − readiness))`: getting off a 90 km ride you never did costs up to 20%. Without a threshold marker: zone-2 pace × 0.90, confidence `laag`.
 - **Transitions**: 8 min.
 
-**Margin** = `sqrt(Σ (legTime × u)²)` with u = 3% / 6% / 10% for hoog / gemiddeld / laag. **Projection to 18 April**: per leg the change over the last six weeks (estimate now vs 42 days ago) per week, clamped to ±1%/week, **halved**, extended over the weeks left; the margin widens by 0.4% per week left. **Biggest gap** = the leg whose projected time exceeds its 5:00 split by the most minutes (> 0.5).
+**Margin** = `sqrt(Σ (legTime × u)²)` with u = 3% / 6% / 10% for hoog / gemiddeld / laag, plus `0.06 × (1 − readiness)`. **Projection to 18 April** ("als je het schema volgt, even trouw als de laatste 4 weken"): fitness — per leg the change over the last six weeks at fixed readiness, per week, clamped to ±1%/week, **halved**, extended over the weeks left; readiness — each gap to the race load (90 km, 18 km, 1,900 m, 8 h/week, 3 bricks) closed in proportion to adherence. The margin widens by 0.4% per week left. **Biggest gap** = the leg whose projected time exceeds its 5:00 split by the most minutes (> 0.5).
 
 This replaces the earlier model, which averaged all sessions of six weeks and therefore measured the training *mix* rather than fitness: more intervals looked "faster", a hard long run counted like an easy one, interval averages included the recovery jogs, and bike speed swung with the wind.
 
-### 8.7 Trends, consistency, volume
+### 8.8 Trends, consistency, volume
 
 - **Trend** markers: relative difference under 0.5% reads `≈ gelijk`; otherwise `▲ X% beter` / `▼ X% minder` (one decimal, comma), respecting the direction of the discipline.
 - **Consistency** = completed ÷ planned over all of that person's sessions from 1 September 2026 up to (not including) today.
@@ -324,20 +335,20 @@ This replaces the earlier model, which averaged all sessions of six weeks and th
 - **Weekly volume** = `Σ tijdMin / 60` of completed non-strength sessions.
 - Rolling window for weekly charts and side-activity sums: the last 12 weeks counted from `PANDA_START`.
 
-### 8.8 Garmin sync via intervals.icu
+### 8.9 Garmin sync via intervals.icu
 
 Garmin offers no API to individuals; intervals.icu is an official Garmin Connect partner with a per-athlete API key (basic auth, user `API_KEY`). Per person two server-side env vars (`ICU_<PERSON>_API_KEY`, optional `ICU_<PERSON>_ATHLETE_ID`, default `0`). Strava is not used: its API terms forbid showing one athlete's data to anyone else, and intervals.icu returns Strava-sourced activities as empty stubs.
 
 - **When**: on app load if the last sync is older than 15 minutes, via the `🔄 Garmin` button, and once a day by cron (authorised by a `CRON_SECRET` bearer token instead of the login cookie). Window: from `lastSync − 3 days` (first time: 1 September 2026) to today.
 - **Activities**: run/trail/treadmill → run, (virtual/gravel/MTB) ride → fiets, (open-water) swim → zwem; anything else (including strength) is skipped, as are Strava stubs. Stats: `moving_time`/60, distance (m → km except swim), avg/max HR, elevation (not swim), average watts only if from a real power meter, RPE. Speed is left empty and derived.
-- **Intervals → structure**: only for activities not seen before. WORK intervals of similar length (±12% time or ±6% distance) in a row form one block; a block is expressed in distance or time, **whichever is rounder** (track reps have round distances, road threshold blocks round times); realised pace and HR per rep; rest = median recovery. One WORK interval covering more than 60% of the session means no structure.
+- **Intervals → structure**, only for genuinely structured sessions. A watch makes an auto-lap every km (bike: 5 km) and intervals.icu reports those as WORK, so a long run would read as 16 × 1000 m. A WORK interval therefore only counts as a rep when a RECOVERY interval (≥ 20 s, swim ≥ 8 s, and slower than the rep) sits directly before or after it. Consecutive reps of similar length (±12% time or ±6% distance) form a block; blocks with a single rep are dropped; at most **two** blocks (largest total work time) are kept. A block is in distance or time, **whichever is rounder**. **Long, easy, endurance and continuous sessions never get a structure.** Intervals are fetched for new activities only; `?rebuild=1` refetches everything since 1 September and recomputes structures.
 - **Kind inference**: ≥2 work reps → threshold (median rep ≥ 8 min) or interval; else long (≥12 km or ≥70 min) or easy; rides tempo/interval/endurance likewise; swims sets/continuous.
 - **Matching**: (1) same `externalId` → update (manual kind, structure and RPE kept); (2) else a session of the same person, date and discipline without `externalId` — planned or already entered by hand — preferring a matching kind and not-done; fill it, keeping its type and kind; (3) else create a new session with the palette type of that phase. Oldest activity first, each session claimed once.
 - **Wind**: intervals.icu provides per ride `average_wind_speed` (m/s), `prevailing_wind_deg`, `headwind_percent`, `tailwind_percent` → km head/tail/cross and Beaufort; none on the trainer.
 - **Wellness**: VO2max, resting HR, weight per day → one record per week (latest non-empty value per field); existing values are never overwritten with empty.
-- **Zones**: zone 2 from the run sport-settings `hr_zones` (upper bounds; zone 2 = zones[0]+1 … zones[1]) unless set manually; LTHR, max HR and FTP filled when empty.
+- **Zones**: zone 2 from the run sport-settings `hr_zones` (upper bounds; zone 2 = zones[0]+1 … zones[1]) unless set manually. A new intervals.icu account carries **defaults** (max 220, LTHR 200, FTP 250) unrelated to the athlete: heart-rate settings are only accepted when max HR ≤ observed robust max + 25 and 75% × max ≤ LTHR < max; FTP only when the athlete has real power data. Defaults taken over earlier are cleared. Count each session once (updated versions replace old ones) when computing the observed max.
 
-### 8.9 Panda counter
+### 8.10 Panda counter
 
 Starting at the week of `PANDA_START` (Monday 31 August 2026), for every week that has **fully elapsed** (its Sunday is in the past) and is not after the race:
 
@@ -346,7 +357,7 @@ Starting at the week of `PANDA_START` (Monday 31 August 2026), for every week th
 
 The sum is the person's panda score, always displayed with an explicit sign. The three weekly counters themselves are just detail; only `geneukt` feeds the score.
 
-### 8.10 Week numbering
+### 8.11 Week numbering
 
 Week numbers shown in the calendar are ISO week numbers (Monday-based, the week containing the year's first Thursday is week 1).
 
