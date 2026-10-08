@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bikeEndurance, readiness, readinessFrom, windPenaltyKmh } from './fitness';
+import { bikeEndurance, readiness, readinessFrom, runThreshold, windPenaltyKmh } from './fitness';
 import {
   beyondLongest,
   estimateAt,
@@ -197,5 +197,28 @@ describe('binnen fietsen', () => {
     ]);
     // buiten 30 km/u; 150 min binnen = 75 km, niet de 120 km van de trainer
     expect(readiness(s, 'tom', '2026-10-07').bikeLongKm).toBeCloseTo(75, 6);
+  });
+});
+
+describe('drempeltempo uit blokken', () => {
+  const block = (hr: number) =>
+    wo({
+      type: 'korte_run', date: '2026-10-03', kind: 'interval', stats: { done: true },
+      structure: [{ reps: 6, workDistM: 800, actual: Array(6).fill(4.5), actualHr: Array(6).fill(hr) }]
+    });
+  const withMax = (ws: Workout[]) => {
+    const s = state(ws);
+    s.settings = { tom: { maxHr: 204 } } as State['settings'];
+    return s;
+  };
+
+  it('telt blokken die je voluit liep (♥ ≥ 92% van je omslagpunt)', () => {
+    const thr = runThreshold(withMax([block(176)]), 'tom', '2026-10-07')!;
+    expect(thr.value).toBeCloseTo(4.5 * Math.pow(60 / (0.8 * 4.5 * 6), 0.06), 3);
+  });
+
+  it('negeert blokken op lage hartslag: die zeggen niets over je drempel', () => {
+    const thr = runThreshold(withMax([block(165)]), 'tom', '2026-10-07');
+    expect(thr?.basis.join(' ') ?? '').not.toContain('6×800 m');
   });
 });

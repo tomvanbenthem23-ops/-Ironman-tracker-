@@ -114,9 +114,15 @@ export function zone2(state: State, person: Person) {
  * ±19 min. Zonder blokken: de snelste uur-equivalente prestatie uit runs van
  * minstens 20 minuten. Easy runs zijn nooit de snelste, dus die tellen
  * vanzelf niet mee.
+ *
+ * Riegel gaat uit van voluit lopen. Een blok waarin je hartslag onder 92% van
+ * je omslagpunt bleef, liep je gecontroleerd: dat zegt niets over je drempel
+ * (6 × 800 m in 4:30 op ♥ 165 met een omslagpunt van 184 zou anders een
+ * drempel van 4:47 geven). Zulke blokken tellen niet mee.
  */
 export function runThreshold(state: State, person: Person, asOf: string): Anchor | null {
   const runs = window(state, person, asOf, 56).filter((w) => catOf(w) === 'run');
+  const lthr = thresholdHr(state, person, asOf);
 
   const fromBlocks: { v: number; d: string; label: string }[] = [];
   for (const w of runs) {
@@ -124,6 +130,9 @@ export function runThreshold(state: State, person: Person, asOf: string): Anchor
       const pace = blockActualAvg(b);
       const repMin = b.workDurS ? b.workDurS / 60 : b.workDistM && pace ? (b.workDistM / 1000) * pace : 0;
       if (!pace || !repMin || repMin < 2) continue;
+      const hrs = (b.actualHr ?? []).filter((h): h is number => !!h);
+      const repHr = hrs.length ? hrs.reduce((x, y) => x + y, 0) / hrs.length : null;
+      if (lthr && repHr && repHr < 0.92 * lthr) continue; // niet voluit: geen drempelmeting
       const workMin = repMin * (b.actual?.filter((x) => x != null).length || b.reps);
       fromBlocks.push({
         v: pace * Math.pow(60 / workMin, RIEGEL),
