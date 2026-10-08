@@ -4,6 +4,7 @@ import { fromIso, weekRec } from '@/lib/calc';
 import { defaultWeekKind, WEEK_LABEL, weekInfo } from '@/lib/prescribe';
 import { useStore } from '@/lib/store';
 import type { WeekKind } from '@/lib/types';
+import { WeekAdviceChip } from './week-advice';
 
 const KIND_STYLE: Record<WeekKind, string> = {
   build: 'border-[#d5dbe2] bg-white text-im-muted',
@@ -67,6 +68,7 @@ export function WeekExtras({
         wk {wk}
       </div>
       <WeekKindToggle weekKey={weekKey} />
+      {!row && <WeekAdviceChip weekKey={weekKey} />}
       {FIELDS.map((f) => {
         const n = rec[f.key] || 0;
         return (

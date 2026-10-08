@@ -523,3 +523,17 @@ describe('streamsToIntervals', () => {
     expect(long.upserts[0].structure).toBeNull();
   });
 });
+
+describe('geplande soort bij een volgende sync', () => {
+  it('houdt een training zonder eigen soort op het weekadvies, ook als het horloge iets anders zag', () => {
+    const first = matchActivities('tom', [planned({ id: 'w1' })], [
+      { act: run({ id: 'z1', distance: 8000, moving_time: 2700 }), intervals: null }
+    ]);
+    expect(first.upserts[0].kind ?? null).toBeNull();
+    const second = matchActivities('tom', first.upserts, [
+      { act: run({ id: 'z1', distance: 8000, moving_time: 2700 }), intervals: null }
+    ]);
+    expect(second.updated).toBe(1);
+    expect(second.upserts[0].kind ?? null).toBeNull(); // niet 'easy'
+  });
+});

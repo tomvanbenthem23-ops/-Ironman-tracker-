@@ -548,11 +548,14 @@ export function matchActivities(
     const prior = byExt.get(extId);
     if (prior) {
       claimed.add(prior.id);
-      const k = prior.kind ?? kind;
+      // een geplande training zonder eigen soort volgt het weekadvies: niet
+      // overschrijven met wat het horloge zag, anders wordt een rustige run
+      // op een drempeldag als rustige run beoordeeld
+      const k = prior.kind ?? kindOf(prior);
       out.upserts.push({
         ...prior,
         stats: { ...stats, rpe: prior.stats.rpe ?? stats.rpe },
-        kind: k,
+        kind: prior.kind ?? null,
         // zonder verse intervallen (gewone sync) blijft de opbouw staan
         structure: STEADY.includes(k)
           ? null

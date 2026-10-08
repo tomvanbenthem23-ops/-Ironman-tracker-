@@ -70,7 +70,7 @@ function MonthGrid({ year, month, byDate, selectedType, onPlace, onOpen }: Props
                 onOpen={onOpen}
               />
             ))}
-            <td className="w-[96px] rounded-im-day bg-im-extras p-1.5 align-top">
+            <td className="w-[112px] rounded-im-day bg-im-extras p-1.5 align-top">
               <WeekExtras weekKey={iso(wkStart)} wk={weekNr(wkStart)} />
             </td>
           </tr>

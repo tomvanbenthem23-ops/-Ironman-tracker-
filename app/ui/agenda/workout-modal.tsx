@@ -7,11 +7,11 @@ import {
   fmtSpeed,
   fmtTijd,
   fromIso,
-  kindOf,
   parseNum,
   parseSpeed,
   parseTijd
 } from '@/lib/calc';
+import { plannedKind } from '@/lib/advice';
 import { compliance, prescribe, WEEK_LABEL } from '@/lib/prescribe';
 import { useStore } from '@/lib/store';
 import type { Kind, Stats, Wind, WindDir } from '@/lib/types';
@@ -51,7 +51,7 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
     if (!w) return;
     const s = w.stats || {};
     setDone(!!s.done);
-    setKind(kindOf(w));
+    setKind(plannedKind(state, w));
     setTijd(s.tijdMin ? fmtTijd(s.tijdMin) : '');
     setGemHr(s.gemHr != null ? String(s.gemHr) : '');
     setMaxHr(s.maxHr != null ? String(s.maxHr) : '');
@@ -102,6 +102,8 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
   if (!w || !t) return null;
 
   const isKracht = t.cat === 'kracht';
+  // zonder eigen keuze: wat het weekadvies voor deze training aanraadt
+  const advisedKind = plannedKind(state, w);
   const fromGarmin = w.source === 'icu';
   const autoWind = w.wind?.source === 'auto';
   const d = fromIso(w.date);
@@ -150,7 +152,9 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
 
     saveWorkout(id, {
       stats,
-      kind,
+      // alleen vastleggen als je zelf iets anders kiest dan het advies; anders
+      // blijft de training het weekadvies volgen
+      kind: w!.kind || kind !== advisedKind ? kind : null,
       structure: rowsToBlocks(rows, w!.type),
       wind,
       indoor: t!.cat === 'fiets' ? indoor : null,
@@ -243,6 +247,11 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
             <div className="mb-2.5">
               <div className="mb-1 text-[.74rem] font-bold uppercase tracking-[.5px] text-im-muted">
                 Soort training
+                {!w.kind && (
+                  <span className="ml-1.5 font-normal normal-case tracking-normal">
+                    · 💡 volgt het weekadvies tot je zelf kiest
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Soort training">
                 {KINDS[t.cat].map((k) => (
@@ -258,6 +267,11 @@ export function WorkoutModal({ id, onClose }: { id: string; onClose: () => void 
                     }`}
                   >
                     {k.label}
+                    {!w.kind && k.kind === advisedKind && (
+                      <span className="ml-1 font-normal opacity-80" title="aangeraden in het weekadvies">
+                        💡
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>

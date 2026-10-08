@@ -2,7 +2,8 @@
 
 import { useDraggable } from '@dnd-kit/core';
 import { DEFAULT_KIND, KIND_SHORT, TYPES } from '@/lib/config';
-import { derivedSpeed, fmtSpeed, fmtTijd, kindOf, structureSummary } from '@/lib/calc';
+import { plannedKind } from '@/lib/advice';
+import { derivedSpeed, fmtSpeed, fmtTijd, structureSummary } from '@/lib/calc';
 import { compliance, prescribe } from '@/lib/prescribe';
 import { useStore } from '@/lib/store';
 import type { Workout } from '@/lib/types';
@@ -29,10 +30,11 @@ export function WorkoutCard({ w, onOpen }: { w: Workout; onOpen: () => void }) {
 
   const s = w.stats || {};
   const isKracht = t.cat === 'kracht';
-  const kind = kindOf(w);
+  // zelf gekozen soort, anders wat het weekadvies voor deze training aanraadt
+  const kind = plannedKind(state, w);
   const done = !!s.done;
 
-  const plan = isKracht ? null : prescribe(state, w);
+  const plan = isKracht ? null : prescribe(state, { ...w, kind });
   const verdict = plan && done ? compliance(w, plan) : null;
 
   const meta: string[] = [];
@@ -47,7 +49,7 @@ export function WorkoutCard({ w, onOpen }: { w: Workout; onOpen: () => void }) {
   }
 
   // soort alleen tonen als die afwijkt van wat het type al zegt
-  const showKind = !isKracht && w.kind && w.kind !== DEFAULT_KIND[w.type];
+  const showKind = !isKracht && kind !== DEFAULT_KIND[w.type];
   const wind = t.cat === 'fiets' && done && !w.indoor ? w.wind : null;
 
   return (
