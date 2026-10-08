@@ -11,10 +11,12 @@ import {
   matchActivities,
   paletteTypeFor,
   speedToUnit,
+  streamsToIntervals,
   wellnessToWeeks,
   zonesFromSettings,
   type IcuActivity,
-  type IcuInterval
+  type IcuInterval,
+  type IcuStreams
 } from './icu-map';
 import type { Workout } from './types';
 
@@ -426,5 +428,98 @@ describe('hometrainer', () => {
     expect(estimatedFtp(acts)).toBe(222);
     expect(estimatedFtp([ride({ device_watts: false, icu_rolling_ftp: 250 })])).toBeNull();
     expect(estimatedFtp([run({ device_watts: true, icu_rolling_ftp: 300 })])).toBeNull();
+  });
+});
+
+/* ================= tempoverloop ================= */
+
+/** Meetreeks per seconde uit stukken [seconden, m/s, hartslag]. */
+const streamOf = (parts: [number, number, number][]): IcuStreams => {
+  const time: number[] = [];
+  const distance: number[] = [];
+  const heartrate: number[] = [];
+  let t = 0;
+  let d = 0;
+  for (const [secs, v, hr] of parts) {
+    for (let i = 0; i < secs; i++) {
+      time.push(t++);
+      d += v;
+      distance.push(d);
+      heartrate.push(hr);
+    }
+  }
+  return { time, distance, heartrate };
+};
+
+/** Zoals Tom op 3 oktober: inlopen, 6 × ±800 m op 4:23 /km met 2 min dribbel, uitlopen. */
+const sixBy800 = (stopInRep3 = false) =>
+  streamOf([
+    [600, 2.8, 140],
+    ...Array.from({ length: 6 }, (_, i): [number, number, number][] => [
+      ...(stopInRep3 && i === 2
+        ? ([[100, 3.8, 166], [20, 0, 160], [110, 3.8, 167]] as [number, number, number][])
+        : ([[210, 3.8, 166]] as [number, number, number][])),
+      ...(i < 5 ? ([[120, 2.3, 150]] as [number, number, number][]) : [])
+    ]).flat(),
+    [300, 2.7, 145]
+  ]);
+
+describe('streamsToIntervals', () => {
+  it('haalt herhalingen uit het tempoverloop als er alleen auto-laps zijn', () => {
+    const iv = streamsToIntervals(sixBy800(), 'run')!;
+    expect(iv.filter((i) => i.type === 'WORK')).toHaveLength(6);
+    expect(iv[0].type).toBe('WARMUP');
+    expect(iv[iv.length - 1].type).toBe('COOLDOWN');
+    const s = intervalsToStructure(iv, 'run', null, 0.25)!;
+    expect(s).toHaveLength(1);
+    expect(s[0].reps).toBe(6);
+    // precies 210 s per herhaling: de rondste maat is dan de tijd (anders 800 m)
+    expect(s[0].workDurS ?? s[0].workDistM).toBe(s[0].workDurS ? 210 : 800);
+    expect(s[0].restDurS).toBeGreaterThan(100);
+    expect(s[0].restDurS).toBeLessThan(140);
+    expect(s[0].actual![0]).toBeCloseTo(1000 / 3.8 / 60, 1);
+  });
+
+  it('telt een stoplicht midden in een herhaling niet als rust', () => {
+    const iv = streamsToIntervals(sixBy800(true), 'run')!;
+    expect(iv.filter((i) => i.type === 'WORK')).toHaveLength(6);
+  });
+
+  it('maakt van een duurloop met wisselend tempo geen intervallen', () => {
+    const wobble = streamOf(
+      Array.from({ length: 50 }, (_, i): [number, number, number] => [60, 2.9 * (1 + 0.04 * Math.sin(i)), 148])
+    );
+    expect(streamsToIntervals(wobble, 'run')).toBeNull();
+  });
+
+  it('herkent heuvels aan de hartslag: bergop trager maar hoger, dat is geen rust', () => {
+    const hills = streamOf(
+      Array.from({ length: 6 }, (): [number, number, number][] => [[240, 3.4, 145], [180, 2.6, 162]]).flat()
+    );
+    expect(streamsToIntervals(hills, 'run')).toBeNull();
+  });
+
+  it('doet niets met fietsen of zwemmen', () => {
+    expect(streamsToIntervals(sixBy800(), 'fiets')).toBeNull();
+    expect(streamsToIntervals(sixBy800(), 'zwem')).toBeNull();
+  });
+
+  it('vult zo de opbouw bij een intervalrun, maar nooit bij een duurloop', () => {
+    const autoLaps: IcuInterval[] = Array.from({ length: 9 }, () => ({
+      type: 'WORK',
+      distance: 1000,
+      moving_time: 330,
+      average_speed: 3.03
+    }));
+    const act = run({ id: 's1', distance: 9200, moving_time: 2970 });
+    const r = matchActivities('tom', [planned({ id: 'k1', type: 'korte_run' })], [
+      { act, intervals: autoLaps, streams: sixBy800() }
+    ]);
+    expect(r.upserts[0].structure?.[0].reps).toBe(6);
+
+    const long = matchActivities('tom', [planned({ id: 'l1', type: 'lange_run' })], [
+      { act, intervals: autoLaps, streams: sixBy800() }
+    ]);
+    expect(long.upserts[0].structure).toBeNull();
   });
 });

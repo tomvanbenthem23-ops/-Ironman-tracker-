@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db, garmin, personSettings, workouts } from '@/lib/db';
 import { rowToWorkout, workoutToRow } from '@/lib/rows';
-import { getIntervals, icuCreds, listActivities, listWellness, sportSettings } from '@/lib/icu';
+import { getIntervals, getStreams, icuCreds, listActivities, listWellness, sportSettings } from '@/lib/icu';
 import {
   disciplineOf,
+  intervalsToStructure,
   matchActivities,
   wellnessToWeeks,
   zonesFromSettings,
   estimatedFtp,
-  type IcuInterval
+  type IcuInterval,
+  type IcuStreams
 } from '@/lib/icu-map';
 import { PERSONS, TYPES } from '@/lib/config';
 import { addDays, iso, robustMax } from '@/lib/calc';
@@ -88,10 +90,28 @@ async function syncPerson(person: Person, rebuild = false) {
     );
   }
 
+  // runs met alleen auto-laps: ook het tempoverloop, om de blokken daaruit te halen
+  const streams = new Map<string, IcuStreams | null>();
+  const needStreams = todo.filter((a) => {
+    const iv = intervals.get(String(a.id));
+    return disciplineOf(a.type) === 'run' && !(iv && intervalsToStructure(iv, 'run', a.moving_time));
+  });
+  for (let i = 0; i < needStreams.length; i += 4) {
+    await Promise.all(
+      needStreams.slice(i, i + 4).map(async (a) => {
+        streams.set(String(a.id), await getStreams(creds, String(a.id)).catch(() => null));
+      })
+    );
+  }
+
   const res = matchActivities(
     person,
     existing,
-    acts.map((act) => ({ act, intervals: intervals.get(String(act.id)) ?? null }))
+    acts.map((act) => ({
+      act,
+      intervals: intervals.get(String(act.id)) ?? null,
+      streams: streams.get(String(act.id)) ?? null
+    }))
   );
   for (const w of res.upserts) {
     const row = workoutToRow(w);

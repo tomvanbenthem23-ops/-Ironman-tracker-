@@ -173,7 +173,7 @@ describe('raceSummary', () => {
 });
 
 describe('binnen fietsen', () => {
-  const windy = { bft: 5, dir: 'tegen' as const };
+  const windy = { source: 'manual' as const, bft: 5, dir: 'tegen' as const };
 
   it('rekent binnen geen wind', () => {
     const out = wo({ type: 'lange_fiets', date: '2026-10-01', wind: windy, stats: { done: true, afstand: 50, tijdMin: 120 } });

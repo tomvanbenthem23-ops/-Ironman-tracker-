@@ -130,7 +130,9 @@ const MAX_BLOCKS = 2;
 export function intervalsToStructure(
   intervals: IcuInterval[],
   cat: Discipline,
-  _totalMovingS?: number | null
+  _totalMovingS?: number | null,
+  /** Hoe ver herhalingen in één blok mogen verschillen; ruimer voor herhalingen uit het tempoverloop. */
+  tolerance = 0.12
 ): Block[] | null {
   const minRest = cat === 'zwem' ? 8 : 20;
   const isRest = (i: IcuInterval | undefined, work: IcuInterval) => {
@@ -157,8 +159,8 @@ export function intervalsToStructure(
     const ref = current?.[0];
     const same =
       ref &&
-      (similar(ref.moving_time ?? 0, iv.moving_time ?? 0, 0.12) ||
-        (!!ref.distance && !!iv.distance && similar(ref.distance, iv.distance, 0.06)));
+      (similar(ref.moving_time ?? 0, iv.moving_time ?? 0, tolerance) ||
+        (!!ref.distance && !!iv.distance && similar(ref.distance, iv.distance, tolerance / 2)));
     if (current && same) current.push(iv);
     else groups.push((current = [iv]));
   });
@@ -197,6 +199,166 @@ export function intervalsToStructure(
     if (restDurS && g.length > 1) b.restDurS = restDurS;
     return b;
   });
+}
+
+/* ================= tempoverloop → intervallen ================= */
+
+/** Meetreeksen per seconde (of per meetpunt) van één activiteit. */
+export type IcuStreams = {
+  time: number[];
+  distance: number[];
+  heartrate?: (number | null)[] | null;
+};
+
+/**
+ * Herhalingen uit het tempoverloop, voor runs waar het horloge alleen
+ * auto-laps per km maakte: de ronden lopen dan dwars door de blokken heen en
+ * er is geen rustinterval om ze aan te herkennen.
+ *
+ * Werkwijze: tempo per meetpunt over 20 s gladgestreken; stilstaan telt niet
+ * mee. De grens tussen hard en rustig volgt uit de verdeling (Otsu: de
+ * splitsing met het grootste verschil tussen beide groepen). Stukken hard
+ * van minstens 60 s zijn herhalingen; een korte onderbreking (≤ 30 s,
+ * stoplicht, tot 45 s als je stilstond) hoort bij de herhaling.
+ *
+ * Alleen als het er echt op lijkt, anders null:
+ * - hard is minstens 25% sneller dan rustig (heuvels en een wisselend
+ *   duurlooptempo blijven daaronder);
+ * - de herhalingen beslaan 10–80% van de tijd;
+ * - de hartslag ligt in de herhalingen hoger dan in de rust (bij heuvels is
+ *   dat andersom);
+ * - minstens twee herhalingen; een stuk dat flink trager is dan de rest
+ *   (het eind van de warming-up) valt af.
+ * Vóór de eerste herhaling is warming-up, na de laatste cooling-down.
+ */
+export function streamsToIntervals(s: IcuStreams, cat: Discipline): IcuInterval[] | null {
+  if (cat !== 'run') return null; // fietssnelheid zegt te weinig (wind, heuvels)
+  const t = s.time;
+  const d = s.distance;
+  const hr = s.heartrate ?? null;
+  const n = Math.min(t?.length ?? 0, d?.length ?? 0);
+  if (n < 300) return null;
+
+  // gladgestreken snelheid (m/s) over ±10 s
+  const sp: number[] = new Array(n);
+  let a = 0;
+  let b = 0;
+  for (let i = 0; i < n; i++) {
+    while (t[a] < t[i] - 10) a++;
+    if (b < i) b = i;
+    while (b + 1 < n && t[b + 1] <= t[i] + 10) b++;
+    sp[i] = t[b] > t[a] ? (d[b] - d[a]) / (t[b] - t[a]) : 0;
+  }
+  const moving = sp.map((v) => v > 1.0); // langzamer dan 16:40 /km = stilstaan
+  const mv = sp.filter((_, i) => moving[i]);
+  if (mv.length < 300) return null;
+
+  const T = otsu(mv);
+  if (T == null) return null;
+  const fastMed = median(mv.filter((v) => v >= T));
+  const slowMed = median(mv.filter((v) => v < T));
+  if (!(slowMed > 0) || fastMed / slowMed < 1.25) return null;
+
+  type Seg = { fast: boolean; a: number; b: number };
+  let segs: Seg[] = [];
+  for (let i = 0; i < n; i++) {
+    const fast = moving[i] && sp[i] >= T;
+    const last = segs[segs.length - 1];
+    if (last && last.fast === fast) last.b = i;
+    else segs.push({ fast, a: i, b: i });
+  }
+  const dur = (g: Seg) => t[g.b] - t[g.a] + 1;
+  const merge = () => {
+    const out: Seg[] = [];
+    for (const g of segs) {
+      const last = out[out.length - 1];
+      if (last && last.fast === g.fast) last.b = g.b;
+      else out.push({ ...g });
+    }
+    segs = out;
+  };
+  const speedOf = (g: Seg) => (d[g.b] - d[g.a]) / dur(g);
+
+  // korte onderbreking binnen een herhaling hoort erbij: tot 30 s, of tot 45 s
+  // als je stilstond (stoplicht; door het gladstrijken lijkt 20 s stilstaan ±30 s)
+  const stood = (g: Seg) => moving.slice(g.a, g.b + 1).includes(false);
+  segs.forEach((g, i) => {
+    if (!g.fast && i > 0 && i < segs.length - 1 && (dur(g) <= 30 || (dur(g) <= 45 && stood(g)))) g.fast = true;
+  });
+  merge();
+  // te kort voor een herhaling (bv. een versnelling van 20 s)
+  segs.forEach((g) => {
+    if (g.fast && dur(g) < 60) g.fast = false;
+  });
+  merge();
+  // flink trager dan de andere herhalingen: eind van de warming-up, geen herhaling
+  const repSpeed = median(segs.filter((g) => g.fast).map(speedOf));
+  segs.forEach((g) => {
+    if (g.fast && speedOf(g) < 0.9 * repSpeed) g.fast = false;
+  });
+  merge();
+
+  const work = segs.filter((g) => g.fast);
+  if (work.length < 2) return null;
+  const cover = work.reduce((x, g) => x + dur(g), 0) / mv.length;
+  if (cover < 0.1 || cover > 0.8) return null;
+
+  const avgHr = (gs: Seg[]) => {
+    let sum = 0;
+    let c = 0;
+    for (const g of gs) for (let i = g.a; i <= g.b; i++) if (hr?.[i]) (sum += hr[i]!), c++;
+    return c ? sum / c : null;
+  };
+  const rest = segs.filter((g, i) => !g.fast && i > 0 && i < segs.length - 1);
+  const workHr = avgHr(work);
+  const restHr = avgHr(rest);
+  if (workHr != null && restHr != null && workHr < restHr + 2) return null;
+
+  return segs.map((g, i) => {
+    const s = dur(g);
+    const dist = Math.max(0, d[g.b] - d[g.a]);
+    const h = avgHr([g]);
+    return {
+      type: g.fast ? 'WORK' : i === 0 ? 'WARMUP' : i === segs.length - 1 ? 'COOLDOWN' : 'RECOVERY',
+      distance: dist,
+      moving_time: s,
+      elapsed_time: s,
+      average_speed: dist / s,
+      average_heartrate: h
+    };
+  });
+}
+
+/** Otsu-drempel: de splitsing van de waarden met het grootste verschil tussen beide groepen. */
+function otsu(xs: number[], bins = 64): number | null {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const x of xs) {
+    if (x < lo) lo = x;
+    if (x > hi) hi = x;
+  }
+  if (!(hi > lo)) return null;
+  const h = new Array(bins).fill(0);
+  for (const x of xs) h[Math.min(bins - 1, Math.floor(((x - lo) / (hi - lo)) * bins))]++;
+  const total = xs.length;
+  const sumAll = h.reduce((s, c, i) => s + c * i, 0);
+  let wB = 0;
+  let sumB = 0;
+  let best = -1;
+  let cut = 0;
+  for (let i = 0; i < bins; i++) {
+    wB += h[i];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += h[i] * i;
+    const between = wB * wF * (sumB / wB - (sumAll - sumB) / wF) ** 2;
+    if (between > best) {
+      best = between;
+      cut = i;
+    }
+  }
+  return lo + ((cut + 1) * (hi - lo)) / bins;
 }
 
 /** Ronde afstanden: 798 m → 800 m, 1004 m → 1000 m; zwemmen op 25 m. */
@@ -353,7 +515,7 @@ export type SyncResult = {
 export function matchActivities(
   person: Person,
   existing: Workout[],
-  items: { act: IcuActivity; intervals: IcuInterval[] | null }[]
+  items: { act: IcuActivity; intervals: IcuInterval[] | null; streams?: IcuStreams | null }[]
 ): SyncResult {
   const mine = existing.filter((w) => w.person === person);
   const byExt = new Map(mine.filter((w) => w.externalId).map((w) => [w.externalId!, w]));
@@ -365,13 +527,18 @@ export function matchActivities(
     a.act.start_date_local < b.act.start_date_local ? -1 : 1
   );
 
-  for (const { act, intervals } of sorted) {
+  for (const { act, intervals, streams } of sorted) {
     if (act.source === 'STRAVA') continue; // lege stub, niet bruikbaar
     const cat = disciplineOf(act.type);
     if (!cat) continue;
 
     const date = act.start_date_local.slice(0, 10);
-    const structure = intervals ? intervalsToStructure(intervals, cat, act.moving_time) : null;
+    // eerst de ronden; leveren die niets op (alleen auto-laps), dan het tempoverloop
+    const fromStream = streams ? streamsToIntervals(streams, cat) : null;
+    const structure =
+      (intervals ? intervalsToStructure(intervals, cat, act.moving_time) : null) ??
+      (fromStream ? intervalsToStructure(fromStream, cat, act.moving_time, 0.25) : null);
+    const fresh = !!intervals || !!streams;
     const kind = inferKind(act, cat, structure);
     const stats = activityStats(act, cat);
     const wind = cat === 'fiets' ? activityWind(act) : null;
@@ -389,7 +556,7 @@ export function matchActivities(
         // zonder verse intervallen (gewone sync) blijft de opbouw staan
         structure: STEADY.includes(k)
           ? null
-          : intervals
+          : fresh
             ? structure
             : (prior.structure ?? null),
         // zelf omgezet (binnen/buiten) gaat voor wat Garmin zegt

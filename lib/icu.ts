@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { Person } from './types';
-import type { IcuActivity, IcuInterval, IcuSportSettings, IcuWellness } from './icu-map';
+import type { IcuActivity, IcuInterval, IcuSportSettings, IcuStreams, IcuWellness } from './icu-map';
 
 /**
  * Minimale intervals.icu-client. Per persoon twee env vars, die jullie zelf in
@@ -46,6 +46,20 @@ export function listActivities(c: IcuCreds, oldest: string, newest: string) {
 export async function getIntervals(c: IcuCreds, activityId: string) {
   const dto = await get<{ icu_intervals?: IcuInterval[] }>(c, `/activity/${activityId}/intervals`);
   return dto.icu_intervals ?? [];
+}
+
+/** Tempo- en hartslagverloop van één activiteit (voor runs met alleen auto-laps). */
+export async function getStreams(c: IcuCreds, activityId: string): Promise<IcuStreams | null> {
+  const list = await get<{ type: string; data: (number | null)[] }[]>(c, `/activity/${activityId}/streams`, {
+    types: 'time,distance,heartrate'
+  });
+  const by = Object.fromEntries((list ?? []).map((s) => [s.type, s.data]));
+  if (!by.time?.length || !by.distance?.length) return null;
+  return {
+    time: by.time as number[],
+    distance: by.distance as number[],
+    heartrate: by.heartrate ?? null
+  };
 }
 
 export function listWellness(c: IcuCreds, oldest: string, newest: string) {
