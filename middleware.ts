@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authToken, COOKIE_NAME } from '@/lib/auth';
 
 // zonder inloggen bereikbaar: het inlogscherm, de privacyverklaring en de iconen
-const PUBLIC_PATHS = ['/login', '/api/login', '/privacy', '/icon', '/apple-icon', '/manifest.webmanifest'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/api/login',
+  '/privacy',
+  '/favicon',
+  '/apple-touch-icon',
+  '/icon',
+  '/manifest.webmanifest',
+  '/robots.txt'
+];
 
 export async function middleware(req: NextRequest) {
   const password = process.env.IM_PASSWORD;
@@ -15,12 +24,17 @@ export async function middleware(req: NextRequest) {
 
   // de dagelijkse Vercel Cron heeft geen cookie, wel CRON_SECRET
   const cron = process.env.CRON_SECRET;
-  if (pathname === '/api/sync' && cron && req.headers.get('authorization') === `Bearer ${cron}`) {
+  if (
+    pathname === '/api/sync' &&
+    cron &&
+    req.headers.get('authorization') === `Bearer ${cron}`
+  ) {
     return NextResponse.next();
   }
 
   const cookie = req.cookies.get(COOKIE_NAME)?.value;
-  if (cookie && cookie === (await authToken(password))) return NextResponse.next();
+  if (cookie && cookie === (await authToken(password)))
+    return NextResponse.next();
 
   if (pathname.startsWith('/api/')) {
     return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });

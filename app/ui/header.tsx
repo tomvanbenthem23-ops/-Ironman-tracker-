@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { NAMES, PERSONS } from '@/lib/config';
 import { fmtSigned, pandaScore } from '@/lib/calc';
 import { useStore } from '@/lib/store';
@@ -23,17 +24,31 @@ export function Header({
   view: View;
   setView: (v: View) => void;
 }) {
-  const { state, person, setPerson, saveState, pending, retry, syncState, syncGarmin } =
-    useStore();
+  const {
+    state,
+    person,
+    setPerson,
+    saveState,
+    pending,
+    retry,
+    syncState,
+    syncGarmin
+  } = useStore();
 
   return (
     <header className="bg-im-navy px-6 pb-3 pt-4 text-white">
       <div className="flex flex-wrap items-center justify-between gap-3.5">
         <h1 className="text-[1.35rem] font-bold tracking-[.5px]">
-          🏊🚴🏃 IRONMAN 70.3 VALENCIA
-          <small className="mt-0.5 block text-[.8rem] font-normal text-im-navy-soft">
-            Zondag 18 april 2027 · doel: onder de 5 uur
-          </small>
+          <Link
+            href="/"
+            onClick={() => setView('agenda')}
+            className="rounded-im-ctl hover:opacity-90"
+          >
+            🏊🚴🏃 IRONMAN 70.3 VALENCIA
+            <small className="mt-0.5 block text-[.8rem] font-normal text-im-navy-soft">
+              Zondag 18 april 2027 · doel: onder de 5 uur
+            </small>
+          </Link>
         </h1>
 
         <Countdown />
@@ -64,7 +79,10 @@ export function Header({
           </div>
 
           <div className="flex gap-1.5" role="tablist" aria-label="Weergave">
-            <ViewTab active={view === 'agenda'} onClick={() => setView('agenda')}>
+            <ViewTab
+              active={view === 'agenda'}
+              onClick={() => setView('agenda')}
+            >
               📅 Agenda
             </ViewTab>
             <ViewTab active={view === 'dash'} onClick={() => setView('dash')}>
@@ -79,7 +97,9 @@ export function Header({
               {syncState.message && (
                 <span
                   aria-live="polite"
-                  className={syncState.status === 'error' ? 'text-im-on-navy-bad' : ''}
+                  className={
+                    syncState.status === 'error' ? 'text-im-on-navy-bad' : ''
+                  }
                 >
                   {syncState.message}
                 </span>
@@ -124,7 +144,9 @@ function PersonTab({
       aria-selected={active}
       onClick={onClick}
       className={`min-h-[38px] rounded-t-im-day px-7 text-[1rem] font-semibold transition-colors ${
-        active ? 'bg-im-bg text-im-ink' : 'bg-white/15 text-[#cfdcea] hover:bg-white/25'
+        active
+          ? 'bg-im-bg text-im-ink'
+          : 'bg-white/15 text-[#cfdcea] hover:bg-white/25'
       }`}
     >
       {NAMES[p]}
@@ -147,7 +169,9 @@ function ViewTab({
       aria-selected={active}
       onClick={onClick}
       className={`min-h-[34px] rounded-[9px] px-4 text-[.85rem] font-semibold transition-colors ${
-        active ? 'bg-white text-im-ink' : 'bg-white/15 text-[#cfdcea] hover:bg-white/25'
+        active
+          ? 'bg-white text-im-ink'
+          : 'bg-white/15 text-[#cfdcea] hover:bg-white/25'
       }`}
     >
       {children}
