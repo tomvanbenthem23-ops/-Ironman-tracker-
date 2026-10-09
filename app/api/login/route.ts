@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authToken, COOKIE_NAME } from '@/lib/auth';
 
 export const preferredRegion = 'fra1'; // Frankfurt: naast de Neon-database
-
-const COOKIE_NAME = 'im_auth';
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -12,11 +11,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true }); // hek staat uit
   }
   if (!body || typeof body.password !== 'string' || body.password !== password) {
-    return NextResponse.json({ error: 'Onjuist wachtwoord' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Dit wachtwoord klopt niet. Controleer het en probeer het opnieuw.' },
+      { status: 401 }
+    );
   }
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(COOKIE_NAME, password, {
+  res.cookies.set(COOKIE_NAME, await authToken(password), {
     httpOnly: true,
     secure: true,
     sameSite: 'lax',

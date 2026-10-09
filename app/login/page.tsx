@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { safeNext } from '@/lib/auth';
 
 function LoginForm() {
   const router = useRouter();
@@ -12,6 +13,10 @@ function LoginForm() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!password.trim()) {
+      setError('Vul het wachtwoord in.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -25,10 +30,10 @@ function LoginForm() {
         setError(body.error || 'Inloggen mislukt');
         return;
       }
-      router.push(params.get('from') || '/');
+      router.push(safeNext(params.get('from')));
       router.refresh();
     } catch {
-      setError('Inloggen mislukt — probeer het opnieuw.');
+      setError('Geen verbinding met de tracker. Controleer je internet en probeer het opnieuw.');
     } finally {
       setBusy(false);
     }
@@ -38,6 +43,7 @@ function LoginForm() {
     <div className="flex min-h-screen items-center justify-center bg-im-bg px-6">
       <form
         onSubmit={submit}
+        noValidate
         className="w-full max-w-[380px] rounded-im-card bg-white p-8 shadow-im-card"
       >
         <div className="mb-5 rounded-im-day bg-im-navy px-4 py-3 text-white">
@@ -64,19 +70,26 @@ function LoginForm() {
           id="password"
           type="password"
           autoFocus
+          required
+          autoComplete="current-password"
+          aria-invalid={!!error}
+          aria-describedby={error ? 'login-error' : undefined}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            if (error) setError('');
+          }}
           className="mb-4 w-full rounded-im-ctl border border-im-line px-3 py-2 text-[15px] outline-none focus:border-im-accent focus:ring-2 focus:ring-im-accent/25"
         />
 
-        {error && (
-          <p className="mb-3 text-[13px] font-semibold text-im-bad">{error}</p>
-        )}
+        <p id="login-error" role="alert" aria-live="polite" className="mb-3 min-h-0 text-[13px] font-semibold text-im-bad empty:hidden">
+          {error}
+        </p>
 
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-im-ctl bg-im-ink px-4 py-2.5 text-[15px] font-bold text-white disabled:opacity-50"
+          className="w-full rounded-im-ctl bg-im-ink px-4 py-2.5 text-[15px] font-bold text-white hover:bg-im-navy-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? 'Bezig…' : 'Inloggen'}
         </button>

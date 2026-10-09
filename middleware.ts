@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authToken, COOKIE_NAME } from '@/lib/auth';
 
-const COOKIE_NAME = 'im_auth';
-const PUBLIC_PATHS = ['/login', '/api/login'];
+// zonder inloggen bereikbaar: het inlogscherm, de privacyverklaring en de iconen
+const PUBLIC_PATHS = ['/login', '/api/login', '/privacy', '/icon', '/apple-icon', '/manifest.webmanifest'];
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const password = process.env.IM_PASSWORD;
   if (!password) return NextResponse.next(); // geen wachtwoord ingesteld -> hek staat open
 
@@ -19,7 +20,7 @@ export function middleware(req: NextRequest) {
   }
 
   const cookie = req.cookies.get(COOKIE_NAME)?.value;
-  if (cookie === password) return NextResponse.next();
+  if (cookie && cookie === (await authToken(password))) return NextResponse.next();
 
   if (pathname.startsWith('/api/')) {
     return NextResponse.json({ error: 'Niet ingelogd' }, { status: 401 });
