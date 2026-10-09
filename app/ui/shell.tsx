@@ -6,11 +6,14 @@ import { useStore } from '@/lib/store';
 import { Header, type View } from './header';
 import { Agenda } from './agenda/agenda';
 import { Dashboard } from './dashboard/dashboard';
+import { SiteFooter } from './site-footer';
 
 /** Opent op de huidige maand als die binnen het schema valt. */
 function initialMonth() {
   const now = new Date();
-  const i = MONTHS.findIndex(([y, m]) => y === now.getFullYear() && m === now.getMonth());
+  const i = MONTHS.findIndex(
+    ([y, m]) => y === now.getFullYear() && m === now.getMonth()
+  );
   return i < 0 ? 0 : i;
 }
 
@@ -23,16 +26,19 @@ export function Shell() {
     <>
       <Header view={view} setView={setView} />
 
-      {!ready ? (
-        <p className="px-6 py-8 text-[.9rem] italic text-im-muted">
-          Trainingen ophalen…
-        </p>
-      ) : view === 'agenda' ? (
-        <Agenda monthIdx={monthIdx} setMonthIdx={setMonthIdx} />
-      ) : (
-        <Dashboard />
-      )}
+      <main>
+        {!ready ? (
+          <p className="px-6 py-8 text-[.9rem] italic text-im-muted">
+            Trainingen ophalen…
+          </p>
+        ) : view === 'agenda' ? (
+          <Agenda monthIdx={monthIdx} setMonthIdx={setMonthIdx} />
+        ) : (
+          <Dashboard />
+        )}
+      </main>
 
+      <SiteFooter />
     </>
   );
 }

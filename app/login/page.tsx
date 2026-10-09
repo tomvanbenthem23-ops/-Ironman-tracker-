@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { safeNext } from '@/lib/auth';
+import { SiteFooter } from '../ui/site-footer';
 
 function LoginForm() {
   const router = useRouter();
@@ -33,68 +34,78 @@ function LoginForm() {
       router.push(safeNext(params.get('from')));
       router.refresh();
     } catch {
-      setError('Geen verbinding met de tracker. Controleer je internet en probeer het opnieuw.');
+      setError(
+        'Geen verbinding met de tracker. Controleer je internet en probeer het opnieuw.'
+      );
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-im-bg px-6">
-      <form
-        onSubmit={submit}
-        noValidate
-        className="w-full max-w-[380px] rounded-im-card bg-white p-8 shadow-im-card"
-      >
-        <div className="mb-5 rounded-im-day bg-im-navy px-4 py-3 text-white">
-          <div className="text-[15px] font-bold tracking-wide">
-            🏊🚴🏃 IRONMAN 70.3 VALENCIA
-          </div>
-          <div className="mt-0.5 text-[12px] text-im-navy-soft">
-            Zondag 18 april 2027 · doel: onder de 5 uur
-          </div>
-        </div>
-
-        <h1 className="mb-1.5 text-[18px] font-bold text-im-ink">Inloggen</h1>
-        <p className="mb-5 text-[13px] text-im-muted">
-          Vul het gedeelde wachtwoord in om bij de tracker te komen.
-        </p>
-
-        <label
-          htmlFor="password"
-          className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-im-muted"
+    <>
+      <main className="flex flex-1 items-center justify-center bg-im-bg px-6 py-10">
+        <form
+          onSubmit={submit}
+          noValidate
+          className="w-full max-w-[380px] rounded-im-card bg-white p-8 shadow-im-card"
         >
-          Wachtwoord
-        </label>
-        <input
-          id="password"
-          type="password"
-          autoFocus
-          required
-          autoComplete="current-password"
-          aria-invalid={!!error}
-          aria-describedby={error ? 'login-error' : undefined}
-          value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-            if (error) setError('');
-          }}
-          className="mb-4 w-full rounded-im-ctl border border-im-line px-3 py-2 text-[15px] outline-none focus:border-im-accent focus:ring-2 focus:ring-im-accent/25"
-        />
+          <div className="mb-5 rounded-im-day bg-im-navy px-4 py-3 text-white">
+            <div className="text-[15px] font-bold tracking-wide">
+              🏊🚴🏃 IRONMAN 70.3 VALENCIA
+            </div>
+            <div className="mt-0.5 text-[12px] text-im-navy-soft">
+              Zondag 18 april 2027 · doel: onder de 5 uur
+            </div>
+          </div>
 
-        <p id="login-error" role="alert" aria-live="polite" className="mb-3 min-h-0 text-[13px] font-semibold text-im-bad empty:hidden">
-          {error}
-        </p>
+          <h1 className="mb-1.5 text-[18px] font-bold text-im-ink">Inloggen</h1>
+          <p className="mb-5 text-[13px] text-im-muted">
+            Vul het gedeelde wachtwoord in om bij de tracker te komen.
+          </p>
 
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-im-ctl bg-im-ink px-4 py-2.5 text-[15px] font-bold text-white hover:bg-im-navy-2 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {busy ? 'Bezig…' : 'Inloggen'}
-        </button>
-      </form>
-    </div>
+          <label
+            htmlFor="password"
+            className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-im-muted"
+          >
+            Wachtwoord
+          </label>
+          <input
+            id="password"
+            type="password"
+            autoFocus
+            required
+            autoComplete="current-password"
+            aria-invalid={!!error}
+            aria-describedby={error ? 'login-error' : undefined}
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              if (error) setError('');
+            }}
+            className="mb-4 w-full rounded-im-ctl border border-im-line px-3 py-2 text-[15px] outline-none focus:border-im-accent focus:ring-2 focus:ring-im-accent/25"
+          />
+
+          <p
+            id="login-error"
+            role="alert"
+            aria-live="polite"
+            className="mb-3 min-h-0 text-[13px] font-semibold text-im-bad empty:hidden"
+          >
+            {error}
+          </p>
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-im-ctl bg-im-ink px-4 py-2.5 text-[15px] font-bold text-white hover:bg-im-navy-2 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? 'Bezig…' : 'Inloggen'}
+          </button>
+        </form>
+      </main>
+      <SiteFooter />
+    </>
   );
 }
 
