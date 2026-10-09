@@ -1,7 +1,5 @@
 import './globals.css';
 
-import { Analytics } from '@vercel/analytics/react';
-
 export const metadata = {
   title: 'Ironman 70.3 Valencia — Tom & Quirijn',
   description:
@@ -18,7 +16,6 @@ export default function RootLayout({
       <body className="flex min-h-screen w-full flex-col bg-im-bg text-im-ink">
         {children}
       </body>
-      <Analytics />
     </html>
   );
 }

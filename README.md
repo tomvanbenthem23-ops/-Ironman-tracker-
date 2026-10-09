@@ -3,10 +3,9 @@
 Trainingstracker voor Tom & Quirijn richting de halve Ironman van Valencia,
 **zondag 18 april 2027**, doel **sub-5 uur**.
 
-Dit is het casco: het template is uitgekleed, de database, de API en het
-inlogscherm staan klaar. **De app zelf wordt gebouwd op basis van
-[`IRONMAN_PROMPT.md`](./IRONMAN_PROMPT.md)** — die build-spec is de bron van
-waarheid voor gedrag, formules, teksten en design.
+Agenda met voorschriften en weekadvies, een dashboard met eindtijdvoorspelling,
+en een Garmin-koppeling via intervals.icu. **[`IRONMAN_PROMPT.md`](./IRONMAN_PROMPT.md)**
+is de build-spec en de bron van waarheid voor gedrag, formules, teksten en design.
 
 ## Stack
 
@@ -15,7 +14,7 @@ Basis: [`vercel/nextjs-postgres-nextauth-tailwindcss-template`](https://github.c
 | Onderdeel | Keuze |
 |---|---|
 | Framework | Next.js 15 (App Router), TypeScript |
-| Styling | Tailwind + shadcn/ui (`components/ui`) |
+| Styling | Tailwind, eigen `im-`-tokens (`tailwind.config.ts`) |
 | Database | Neon Postgres via Drizzle (`lib/db.ts`) |
 | Auth | Eén gedeeld wachtwoord (`IM_PASSWORD`), cookie-gate in `middleware.ts` |
 | Drag & drop | `@dnd-kit/*` |
@@ -48,4 +47,4 @@ productie.
 ## Deployen
 
 De app draait op **https://ironman-tracker-khaki.vercel.app**. Zie [`DEPLOY.md`](./DEPLOY.md)
-voor de opzet en wat er nog te doen is.
+voor de opzet.

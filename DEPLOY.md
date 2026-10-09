@@ -1,6 +1,6 @@
 # Deploy
 
-**Staat live.** Dit bestand beschrijft hoe het draait en wat er nog te doen is.
+**Staat live.** Dit bestand beschrijft hoe het draait.
 
 ## Wat er staat
 

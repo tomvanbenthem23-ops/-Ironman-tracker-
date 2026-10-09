@@ -2,24 +2,13 @@ import type { Config } from 'tailwindcss';
 
 /**
  * Designtokens uit sectie 9 van IRONMAN_PROMPT.md staan onder de `im-` prefix.
- * De shadcn/ui-tokens (border, background, primary, …) blijven staan zodat de
- * meegeleverde componenten in components/ui blijven werken.
  */
 export default {
-  darkMode: ['class'],
   content: [
-    './pages/**/*.{ts,tsx}',
-    './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
-    './src/**/*.{ts,tsx}'
+    './lib/**/*.{ts,tsx}'
   ],
-  prefix: '',
   theme: {
-    container: {
-      center: true,
-      padding: '2rem',
-      screens: { '2xl': '1400px' }
-    },
     extend: {
       colors: {
         // --- Ironman-tracker ---
@@ -66,40 +55,6 @@ export default {
           500: '#b85450',
           200: '#b6d7a8',
           600: '#6aa84f'
-        },
-        // --- shadcn/ui ---
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))'
-        },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))'
-        },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))'
-        },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))'
-        },
-        accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))'
-        },
-        popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))'
-        },
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))'
         }
       },
       backgroundImage: {
@@ -114,26 +69,9 @@ export default {
       borderRadius: {
         'im-ctl': '8px',
         'im-day': '10px',
-        'im-card': '14px',
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)'
-      },
-      keyframes: {
-        'accordion-down': {
-          from: { height: '0' },
-          to: { height: 'var(--radix-accordion-content-height)' }
-        },
-        'accordion-up': {
-          from: { height: 'var(--radix-accordion-content-height)' },
-          to: { height: '0' }
-        }
-      },
-      animation: {
-        'accordion-down': 'accordion-down 0.2s ease-out',
-        'accordion-up': 'accordion-up 0.2s ease-out'
+        'im-card': '14px'
       }
     }
   },
-  plugins: [require('tailwindcss-animate')]
+  plugins: []
 } satisfies Config;
