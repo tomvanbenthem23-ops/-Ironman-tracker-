@@ -537,3 +537,15 @@ describe('geplande soort bij een volgende sync', () => {
     expect(second.upserts[0].kind ?? null).toBeNull(); // niet 'easy'
   });
 });
+
+describe('zwemsets van ongelijke lengte', () => {
+  it('ziet 300, 300, 375, 250 en 325 m als 5 × 300 m; een trage baan is rust', () => {
+    const sw = (m: number, s: number): IcuInterval => ({ type: 'WORK', distance: m, moving_time: s, elapsed_time: s, average_speed: m / s });
+    const r = (s: number): IcuInterval => ({ type: 'RECOVERY', distance: 0, moving_time: s, elapsed_time: s });
+    const today = [sw(300, 373), r(110), sw(300, 373), r(101), sw(375, 447), r(24), sw(25, 105), sw(250, 315), r(62), sw(325, 389), r(98)];
+    const s = intervalsToStructure(today, 'zwem')!;
+    expect(s).toHaveLength(1);
+    expect(s[0]).toMatchObject({ reps: 5, workDistM: 300 });
+    expect(s[0].actual).toHaveLength(5);
+  });
+});

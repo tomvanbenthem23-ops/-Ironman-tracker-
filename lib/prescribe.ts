@@ -391,7 +391,8 @@ function swimSets(a: Anchors, wk: WeekKind, step: number, f: number): Prescripti
   const cssT = a.css ? toward(a.css.value, REQUIRED.swimCss, f) : null;
   const pace = cssT ? cssT + 2 / 60 : null;
   const restS = m <= 200 ? 20 : 30;
-  const total = 300 + reps * m + 200;
+  // inzwemmen meet je niet mee: telt niet in de afstand (en dus niet in het oordeel)
+  const total = reps * m + 200;
   const at = pace ? ` @ ${fmtPace(pace)} /100m` : '';
   return {
     kind: 'sets',
@@ -400,10 +401,10 @@ function swimSets(a: Anchors, wk: WeekKind, step: number, f: number): Prescripti
     distM: total,
     summary: `${reps}×${m} m${at}`,
     details: [
-      '300 m inzwemmen.',
+      'Inzwemmen: ±300 m rustig, telt niet mee.',
       `${reps} × ${m} m${at}, ${restS} s rust aan de kant.`,
       '200 m uitzwemmen.',
-      `Totaal ${total} m.`
+      `Totaal ${total} m, zonder het inzwemmen.`
     ],
     basis: a.css?.basis ?? [],
     missing: pace ? undefined : 'Nog geen CSS: zwem de herhalingen op gevoel en vul je tijd per herhaling in.'
@@ -479,7 +480,14 @@ export function compliance(w: Workout, p: Prescription): Compliance | null {
       const fmt = (v: number) => (cat === 'fiets' ? fmtDec(v) : fmtPace(v));
       notes.push(`gem. ${fmt(avg)}${unit} (doel ${fmt(target.speed)})`);
     }
-    if (done.reps < target.reps) {
+    // minder herhalingen is alleen erg als je ook minder wérk deed: 5 × 300 m
+    // is meer dan 6 × 200 m. Bij zwemmen telt ook de totale afstand.
+    const unitOf = (b: Block) => (target.workDistM ? b.workDistM : target.workDurS ? b.workDurS : null) ?? 0;
+    const targetWork = target.reps * unitOf(target);
+    const doneWork = (w.structure ?? []).reduce((x, b) => x + b.reps * unitOf(b), 0);
+    const enoughWork = targetWork > 0 && doneWork >= 0.95 * targetWork;
+    const enoughSwim = cat === 'zwem' && !!p.distM && !!s.afstand && s.afstand >= 0.95 * p.distM;
+    if (done.reps < target.reps && !enoughWork && !enoughSwim) {
       vs.push(done.reps >= target.reps - 1 ? 'close' : 'miss');
       notes.push(`${done.reps} van ${target.reps} herhalingen`);
     }

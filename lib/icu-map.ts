@@ -126,15 +126,30 @@ const MAX_BLOCKS = 2;
  * grootste twee blokken (in werktijd) blijven over. Of een blok in afstand of
  * tijd staat hangt af van wat het rondst is: baanherhalingen hebben ronde
  * afstanden (800 m), drempelblokken op de weg ronde tijden (20 min).
+ *
+ * Zwemmen is ruimer (±25%): in een bad van 25 m worden sets nooit precies
+ * even lang (300, 375, 250, 325 m is gewoon "5 × 300 m"). Een baan die veel
+ * trager is dan de rest (< 70% van het mediane tempo: uitdrijven, een drill)
+ * telt daar als rust in plaats van als herhaling.
  */
 export function intervalsToStructure(
-  intervals: IcuInterval[],
+  input: IcuInterval[],
   cat: Discipline,
   _totalMovingS?: number | null,
   /** Hoe ver herhalingen in één blok mogen verschillen; ruimer voor herhalingen uit het tempoverloop. */
-  tolerance = 0.12
+  tolerance = cat === 'zwem' ? 0.25 : 0.12
 ): Block[] | null {
   const minRest = cat === 'zwem' ? 8 : 20;
+  let intervals = input;
+  if (cat === 'zwem') {
+    const speeds = input.filter((i) => i.type === 'WORK' && i.average_speed).map((i) => i.average_speed!);
+    const med = speeds.length ? median(speeds) : 0;
+    intervals = input.map((i) =>
+      i.type === 'WORK' && med && i.average_speed && i.average_speed < 0.7 * med
+        ? { ...i, type: 'RECOVERY', elapsed_time: i.elapsed_time ?? i.moving_time }
+        : i
+    );
+  }
   const isRest = (i: IcuInterval | undefined, work: IcuInterval) => {
     if (!i || i.type !== 'RECOVERY') return false;
     if ((i.elapsed_time ?? i.moving_time ?? 0) < minRest) return false;

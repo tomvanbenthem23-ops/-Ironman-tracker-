@@ -263,10 +263,10 @@ describe('kwaliteitstrainingen', () => {
     expect(p.missing).toBeTruthy();
   });
 
-  it('zwemsets: 6 × 200 met warm-up en uitzwemmen', () => {
+  it('zwemsets: 6 × 200 plus uitzwemmen; het inzwemmen telt niet mee', () => {
     const p = prescribe(state([]), wo({ type: 'zwem', date: '2026-10-08' }))!;
     expect(p.blocks![0]).toMatchObject({ reps: 6, workDistM: 200, restDurS: 20 });
-    expect(p.distM).toBe(1700);
+    expect(p.distM).toBe(1400);
   });
 
   it('fietsen op vermogen als er een FTP is (Quirijn)', () => {
@@ -319,6 +319,32 @@ describe('compliance', () => {
     const c = compliance(w, p)!;
     expect(c.verdict).toBe('close'); // tempo gehaald, één herhaling gemist
     expect(c.notes).toContain('5 van 6 herhalingen');
+  });
+
+  it('minder maar langere herhalingen: telt het werk, niet het aantal', () => {
+    const w = wo({
+      type: 'korte_run',
+      date: '2026-10-08',
+      stats: { done: true },
+      structure: [{ reps: 4, workDistM: 1200, actual: [4.0, 4.0, 4.0, 4.0] }]
+    });
+    const p = { ...plan(w), blocks: [{ reps: 6, workDistM: 800, speed: 4.05 }] };
+    const c = compliance(w, p)!;
+    expect(c.verdict).toBe('hit');
+    expect(c.notes.join(' ')).not.toContain('herhalingen');
+  });
+
+  it('zwemmen zoals Tom op 9 oktober: 5 × 300 m sneller dan gepland is gehaald', () => {
+    const w = wo({
+      type: 'zwem',
+      date: '2026-10-09',
+      stats: { done: true, afstand: 1575, tijdMin: 31.9 },
+      structure: [{ reps: 5, workDistM: 300, actual: [2.07, 2.07, 1.99, 2.1, 1.99] }]
+    });
+    const p = prescribe(s, w)!;
+    expect(p.distM).toBe(1400);
+    const c = compliance(w, { ...p, blocks: [{ ...p.blocks![0], speed: 2.15 }] })!;
+    expect(c.verdict).toBe('hit');
   });
 
   it('nog niet gedaan: geen oordeel', () => {
