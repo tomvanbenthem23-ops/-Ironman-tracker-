@@ -549,3 +549,24 @@ describe('zwemsets van ongelijke lengte', () => {
     expect(s[0].actual).toHaveLength(5);
   });
 });
+
+describe("drie tempo's: wandelpauzes, inlopen en blokken", () => {
+  it('plakt het inlopen niet aan het eerste blok (Tom, 11 oktober)', () => {
+    const run = streamOf([
+      [720, 2.86, 150],
+      [567, 3.86, 169],
+      [155, 1.38, 139],
+      [541, 3.6, 164],
+      [212, 1.2, 124],
+      [420, 3.8, 164]
+    ]);
+    const iv = streamsToIntervals(run, 'run')!;
+    expect(iv[0].type).toBe('WARMUP');
+    const work = iv.filter((i) => i.type === 'WORK');
+    expect(work).toHaveLength(3);
+    expect(work[0].moving_time).toBeGreaterThan(540);
+    expect(work[0].moving_time).toBeLessThan(600);
+    const s = intervalsToStructure(iv, 'run', null, 0.3)!;
+    expect(s[0].reps).toBe(3);
+  });
+});

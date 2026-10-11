@@ -347,6 +347,22 @@ describe('compliance', () => {
     expect(c.verdict).toBe('hit');
   });
 
+  it('tempo-rit zonder herkende blokken: duur en gemiddelde hartslag boven zone 2', () => {
+    const w = wo({
+      type: 'korte_fiets',
+      date: '2026-10-08',
+      kind: 'tempo',
+      stats: { done: true, tijdMin: 104, afstand: 50.2, gemHr: 153 }
+    });
+    const p = plan(w);
+    expect(p.kind).toBe('tempo');
+    const c = compliance(w, p)!;
+    expect(c.verdict).toBe('hit');
+    expect(c.notes.join(' ')).toContain('boven zone 2');
+    const easy = compliance({ ...w, stats: { ...w.stats, gemHr: 120 } }, p)!;
+    expect(easy.verdict).toBe('miss');
+  });
+
   it('nog niet gedaan: geen oordeel', () => {
     const w = wo({ type: 'lange_run', date: '2026-10-11' });
     expect(compliance(w, plan(w))).toBeNull();

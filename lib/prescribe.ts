@@ -140,6 +140,8 @@ export type Prescription = {
   durMin?: number;
   hrMax?: number | null;
   hrMin?: number | null;
+  /** Bovengrens zone 2 (fiets): wat een harde rit zonder herkende blokken minstens gemiddeld haalt. */
+  z2Top?: number | null;
   /** Verwachte snelheid/tempo — bij long runs nadrukkelijk géén doel. */
   expect?: number | null;
   blocks?: Block[];
@@ -357,6 +359,7 @@ function bikeTempo(a: Anchors, wk: WeekKind, step: number, f: number): Prescript
     kind: 'tempo',
     weekKind: wk,
     blocks: [block],
+    z2Top: z?.high ?? null,
     durMin: 20 + reps * min + (reps - 1) * (block.restDurS! / 60) + 10,
     summary: `${reps}×${min} min · ${intensity}`,
     details: [
@@ -377,6 +380,7 @@ function bikeInterval(a: Anchors, wk: WeekKind, step: number): Prescription {
     kind: 'interval',
     weekKind: wk,
     blocks: [{ reps, workDurS: min * 60, watts: ftp ? Math.round(ftp * 1.05) : null, restDurS: min * 60 }],
+    z2Top: z?.high ?? null,
     durMin: 20 + reps * min * 2 + 10,
     summary: `${reps}×${min} min · ${intensity}`,
     details: [`20 min inrijden, ${reps} × ${min} min ${intensity} met even lang rustig ertussen, 10 min uitrijden.`],
@@ -464,6 +468,26 @@ export function compliance(w: Workout, p: Prescription): Compliance | null {
     const over = s.gemHr - p.hrMax;
     vs.push(over <= 2 ? 'hit' : over <= 7 ? 'close' : 'miss');
     notes.push(over <= 2 ? `♥ ${s.gemHr}, in zone 2` : `♥ ${s.gemHr}, ${over} boven zone 2`);
+  }
+
+  // harde fietstraining zonder herkende blokken (buiten zegt de snelheid te
+  // weinig om ze uit het verloop te halen): genoeg duur, en gemiddeld boven
+  // zone 2 — met inrijden en uitrijden erbij ligt het gemiddelde lager dan in de blokken
+  if (cat === 'fiets' && ['tempo', 'interval'].includes(p.kind) && !w.structure?.length) {
+    if (p.durMin && s.tijdMin) {
+      const r = s.tijdMin / p.durMin;
+      vs.push(r >= 0.95 ? 'hit' : r >= 0.85 ? 'close' : 'miss');
+      notes.push(`${Math.round(s.tijdMin)} van ${Math.round(p.durMin)} min`);
+    }
+    if (p.z2Top && s.gemHr) {
+      const d = s.gemHr - p.z2Top;
+      vs.push(d >= 0 ? 'hit' : d >= -5 ? 'close' : 'miss');
+      notes.push(
+        d >= 0
+          ? `gem. ♥ ${s.gemHr}, boven zone 2: hard genoeg (blokken niet herkend)`
+          : `gem. ♥ ${s.gemHr}, ${-d} onder de bovenkant van zone 2: te rustig voor deze training`
+      );
+    }
   }
 
   // tempo per blok

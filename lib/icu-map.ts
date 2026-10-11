@@ -226,7 +226,7 @@ export type IcuStreams = {
 };
 
 /**
- * Herhalingen uit het tempoverloop, voor runs waar het horloge alleen
+ * Herhalingen uit het tempoverloop (in een blok mag ±30% verschillen), voor runs waar het horloge alleen
  * auto-laps per km maakte: de ronden lopen dan dwars door de blokken heen en
  * er is geen rustinterval om ze aan te herkennen.
  *
@@ -268,8 +268,13 @@ export function streamsToIntervals(s: IcuStreams, cat: Discipline): IcuInterval[
   const mv = sp.filter((_, i) => moving[i]);
   if (mv.length < 300) return null;
 
-  const T = otsu(mv);
-  if (T == null) return null;
+  // Drie tempo's (wandelpauzes, inlopen, blokken): de eerste splitsing legt de
+  // grens bij het wandelen en dan is bijna alles "hard". Splits die harde
+  // groep dan nog eens, zodat het inlopen niet aan het eerste blok vastplakt.
+  const T1 = otsu(mv);
+  if (T1 == null) return null;
+  const fastShare = mv.filter((v) => v >= T1).length / mv.length;
+  const T = fastShare > 0.8 ? (otsu(mv.filter((v) => v >= T1)) ?? T1) : T1;
   const fastMed = median(mv.filter((v) => v >= T));
   const slowMed = median(mv.filter((v) => v < T));
   if (!(slowMed > 0) || fastMed / slowMed < 1.25) return null;
@@ -552,7 +557,7 @@ export function matchActivities(
     const fromStream = streams ? streamsToIntervals(streams, cat) : null;
     const structure =
       (intervals ? intervalsToStructure(intervals, cat, act.moving_time) : null) ??
-      (fromStream ? intervalsToStructure(fromStream, cat, act.moving_time, 0.25) : null);
+      (fromStream ? intervalsToStructure(fromStream, cat, act.moving_time, 0.3) : null);
     const fresh = !!intervals || !!streams;
     const kind = inferKind(act, cat, structure);
     const stats = activityStats(act, cat);
