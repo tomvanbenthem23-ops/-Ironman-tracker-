@@ -21,7 +21,7 @@ import {
   weekVolume,
   type Trend
 } from '@/lib/calc';
-import { anchors, type Anchor } from '@/lib/fitness';
+import { anchors, zone2, type Anchor } from '@/lib/fitness';
 import { REQUIRED } from '@/lib/prescribe';
 import { LEG_LABEL, raceSummary, raceView, type Estimate, type Leg, type LegKey } from '@/lib/race';
 import { goalView, type GoalLeg, type Verdict } from '@/lib/goal';
@@ -499,6 +499,7 @@ function GarminCard() {
 
   const auto = !!state.integrations[person];
   const ps = state.settings[person] ?? {};
+  const z2 = zone2(state, person);
   const last = ps.lastSync ? new Date(ps.lastSync) : null;
   const num = (raw: string) => (raw === '' || Number.isNaN(Number(raw)) ? null : Number(raw));
 
@@ -540,13 +541,11 @@ function GarminCard() {
         <div className="mb-1 flex items-baseline justify-between text-[.72rem] uppercase tracking-[.5px] text-im-muted">
           <span>Max-HR en zone 2</span>
           <span className="normal-case tracking-normal">
-            {ps.z2Source === 'garmin'
-              ? 'zone 2 uit je Garmin-zones'
-              : ps.z2Source === 'manual'
-                ? 'zone 2 zelf ingevuld'
-                : ps.maxHr
-                  ? `zone 2 = 60–70% van max: ${Math.round(ps.maxHr * 0.6)}–${Math.round(ps.maxHr * 0.7)}`
-                  : 'nog niet ingesteld'}
+            {z2.source === 'manual'
+              ? 'zone 2 zelf ingevuld'
+              : z2.source === 'reserve'
+                ? `zone 2 = 60–70% van je hartslagreserve (max ${z2.max}, rust ${z2.rest}): ${z2.low}–${z2.high}`
+                : 'nog niet ingesteld'}
           </span>
         </div>
         <div className="grid grid-cols-4 gap-2">

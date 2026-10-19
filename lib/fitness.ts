@@ -96,10 +96,18 @@ export function zone2(state: State, person: Person) {
   const s = state.settings[person] ?? {};
   if (s.z2High) return { low: s.z2Low ?? null, high: s.z2High, source: s.z2Source ?? null };
   if (s.maxHr) {
+    // 60–70% van de hartslagreserve (Karvonen): houdt rekening met je
+    // rusthartslag. 60–70% van de max is bij een getraind hart te streng
+    // (Tom: 122–143 terwijl rustige runs op ±150 lopen); dit schuift mee als
+    // je rusthartslag daalt.
+    const rest = restingHr(state, person);
+    const reserve = s.maxHr - rest;
     return {
-      low: Math.round(s.maxHr * 0.6),
-      high: Math.round(s.maxHr * 0.7),
-      source: 'max-HR'
+      low: Math.round(rest + 0.6 * reserve),
+      high: Math.round(rest + 0.7 * reserve),
+      source: 'reserve',
+      rest,
+      max: s.maxHr
     };
   }
   return { low: null, high: null, source: null };

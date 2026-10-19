@@ -94,12 +94,27 @@ describe('toward', () => {
 /* ================= fitheid ================= */
 
 describe('fitheidsankers', () => {
-  it('haalt zone 2 uit de instellingen, anders uit max-HR', () => {
+  it('haalt zone 2 uit de instellingen, anders uit de hartslagreserve', () => {
     expect(zone2(withZ2([]), 'tom')).toMatchObject({ low: 132, high: 148 });
+    // max 190, rust onbekend (55): reserve 135 → 55 + 81 … 55 + 94,5
     expect(zone2(state([], { settings: { tom: { maxHr: 190 } } }), 'tom')).toMatchObject({
-      low: 114,
-      high: 133
+      low: 136,
+      high: 150,
+      source: 'reserve'
     });
+  });
+
+  it('zone 2 schuift mee met je rusthartslag (Tom en Quirijn op dezelfde manier)', () => {
+    const tom = state([], {
+      settings: { tom: { maxHr: 204 } },
+      garmin: { tom: { '2026-10-12': { rhr: 57 } } }
+    });
+    expect(zone2(tom, 'tom')).toMatchObject({ low: 145, high: 160, rest: 57 });
+    const q = state([], {
+      settings: { quirijn: { maxHr: 207 } },
+      garmin: { quirijn: { '2026-10-12': { rhr: 43 } } }
+    });
+    expect(zone2(q, 'quirijn')).toMatchObject({ low: 141, high: 158 });
   });
 
   it('leest het drempeltempo uit 2 × 20 min via Riegel op de totale werktijd', () => {

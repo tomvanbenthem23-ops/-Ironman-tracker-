@@ -156,17 +156,13 @@ async function syncPerson(person: Person, rebuild = false) {
   const eftp = estimatedFtp(acts);
 
   const set: Record<string, unknown> = { lastSync: new Date(), updatedAt: new Date() };
-  if (settingRow?.z2Source !== 'manual') {
-    if (zones.z2High) {
-      set.z2Low = zones.z2Low;
-      set.z2High = zones.z2High;
-      set.z2Source = 'garmin';
-    } else if (settingRow?.z2Source === 'garmin') {
-      // eerder overgenomen standaardzones van intervals.icu weer weghalen
-      set.z2Low = null;
-      set.z2High = null;
-      set.z2Source = null;
-    }
+  // zone 2 rekenen we zelf uit (60–70% van de hartslagreserve, fitness.ts),
+  // voor iedereen op dezelfde manier: de zones van intervals.icu volgen een
+  // andere methode. Eerder overgenomen zones weer weghalen.
+  if (settingRow?.z2Source === 'garmin') {
+    set.z2Low = null;
+    set.z2High = null;
+    set.z2Source = null;
   }
   if (zones.lthr) set.lthr = zones.lthr;
   else if (settingRow?.lthr && settingRow.lthr === zones.raw.lthr) set.lthr = null;
@@ -191,7 +187,6 @@ async function syncPerson(person: Person, rebuild = false) {
     created: res.created,
     matched: res.matched,
     updated: res.updated,
-    wellnessWeeks: Object.keys(weeks).length,
-    z2: set.z2High ? `${set.z2Low}–${set.z2High}` : null
+    wellnessWeeks: Object.keys(weeks).length
   };
 }
