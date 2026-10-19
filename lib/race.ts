@@ -1,4 +1,4 @@
-import { GOAL_SPLITS, RACE, RACE_DIST } from './config';
+import { GOAL_SPLITS, RACE, RACE_DIST, GROWTH_RATES } from './config';
 import { addDays, fmtHM, fmtPace, fmtDec, fromIso, iso } from './calc';
 import {
   adherence,
@@ -302,8 +302,8 @@ export function fitnessTrend(
 
 /**
  * Projectie naar 18 april. Fitheid: per onderdeel de trend van de laatste zes
- * weken (fitnessTrend), begrensd op ±1% per week en gehalveerd (vooruitgang
- * vlakt af). Raceklaar: zie projectReadiness. Elke week verder weg maakt de
+ * weken (fitnessTrend), gehalveerd (vooruitgang vlakt af); sneller worden
+ * hooguit in het realistische tempo van GROWTH_RATES, trager hooguit 0,5%/week. Raceklaar: zie projectReadiness. Elke week verder weg maakt de
  * marge 0,4% breder.
  */
 export function raceView(state: State, person: Person, asOf = iso(new Date())): RaceView {
@@ -318,8 +318,11 @@ export function raceView(state: State, person: Person, asOf = iso(new Date())): 
 
   const legs = {} as Record<LegKey, Leg>;
   for (const k of ['zwem', 'fiets', 'run'] as LegKey[]) {
-    const rate = Math.max(-MAX_WEEKLY, Math.min(MAX_WEEKLY, trend[k]));
-    const factor = 1 + rate * 0.5 * weeksLeft;
+    // gemeten trend gehalveerd (vooruitgang vlakt af); sneller worden hooguit in
+    // het realistische tempo uit 'Wat 5:00 vraagt', trager worden hooguit 0,5%/week
+    const half = trend[k] * 0.5;
+    const rate = half < 0 ? Math.max(half, -GROWTH_RATES[k].realistic) : Math.min(half, MAX_WEEKLY * 0.5);
+    const factor = 1 + rate * weeksLeft;
     const leg = atRace.legs[k];
     legs[k] = {
       ...leg,

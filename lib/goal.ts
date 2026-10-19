@@ -1,4 +1,4 @@
-import { GOAL_SPLITS, TAPER_WEEK } from './config';
+import { GOAL_SPLITS, GROWTH_RATES, TAPER_WEEK } from './config';
 import { fromIso, iso } from './calc';
 import { anchors, readinessFrom } from './fitness';
 import { REQUIRED } from './prescribe';
@@ -26,11 +26,7 @@ import type { Person, State } from './types';
 
 export type Verdict = 'met' | 'realistic' | 'ambitious' | 'unlikely' | 'missing';
 
-export const RATES: Record<LegKey, { realistic: number; ambitious: number }> = {
-  zwem: { realistic: 0.003, ambitious: 0.006 },
-  run: { realistic: 0.0025, ambitious: 0.005 },
-  fiets: { realistic: 0.002, ambitious: 0.0035 }
-};
+export const RATES: Record<LegKey, { realistic: number; ambitious: number }> = GROWTH_RATES;
 
 export type GoalLeg = {
   key: LegKey;

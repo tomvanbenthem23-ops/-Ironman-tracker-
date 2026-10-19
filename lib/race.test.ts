@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bikeEndurance, readiness, readinessFrom, runThreshold, windPenaltyKmh } from './fitness';
+import { adherence, bikeEndurance, readiness, readinessFrom, runThreshold, windPenaltyKmh } from './fitness';
 import {
   beyondLongest,
   estimateAt,
@@ -258,5 +258,18 @@ describe('fitheidstrend', () => {
     const s = withHr([early, ...weekly(5.6, 0)]);
     const v = raceView(s, 'tom', '2026-10-19');
     expect(v.projected.legs.run.min!).toBeLessThanOrEqual(v.today.legs.run.min! + 0.01);
+  });
+});
+
+describe('projectie en realistisch groeitempo', () => {
+  it('rekent vooruitgang nooit sneller door dan het realistische tempo uit "Wat 5:00 vraagt"', () => {
+    // in zes weken van 4:60 naar 4:20 drempel en 25 naar 31 km/u: veel te snel om door te trekken
+    const s = state([...fit('2026-08-25', 5.0, 2.1, 25), ...fit('2026-09-15', 4.7, 2.0, 28), ...fit('2026-10-05', 4.33, 1.9, 31)]);
+    const asOf = '2026-10-07';
+    const v = raceView(s, 'tom', asOf);
+    const atRace = estimateAt(s, 'tom', asOf, projectReadiness(readiness(s, 'tom', asOf), adherence(s, 'tom', asOf)));
+    for (const [k, rate] of [['run', 0.0025], ['fiets', 0.002], ['zwem', 0.003]] as const) {
+      expect(v.projected.legs[k].min! / atRace.legs[k].min!).toBeGreaterThanOrEqual(1 - rate * v.weeksLeft - 1e-9);
+    }
   });
 });

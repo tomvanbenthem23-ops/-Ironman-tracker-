@@ -158,3 +158,15 @@ export const BLOCK_START = new Date(2026, 9, 5);
 /** Taperweek en raceweek. */
 export const TAPER_WEEK = new Date(2027, 3, 5);
 export const RACE_WEEK = new Date(2027, 3, 12);
+
+/**
+ * Hoeveel sneller je per week kunt worden, in snelheid (0,002 = 0,2%).
+ * Realistisch en ambitieus; fietssnelheid groeit maar met de derdemachtswortel
+ * van je vermogen. Gebruikt door "Wat 5:00 vraagt" (goal.ts) én als bovengrens
+ * voor de vooruitgang in de projectie (race.ts), zodat die twee kloppen.
+ */
+export const GROWTH_RATES = {
+  zwem: { realistic: 0.003, ambitious: 0.006 },
+  run: { realistic: 0.0025, ambitious: 0.005 },
+  fiets: { realistic: 0.002, ambitious: 0.0035 }
+} as const;
