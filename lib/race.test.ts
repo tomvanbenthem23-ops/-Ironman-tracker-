@@ -3,11 +3,13 @@ import { bikeEndurance, readiness, readinessFrom, runThreshold, windPenaltyKmh }
 import {
   beyondLongest,
   estimateAt,
+  fitnessTrend,
   projectReadiness,
   raceSummary,
   raceView,
   speedFromPower
 } from './race';
+import { addDays, iso } from './calc';
 import { emptyState, type State, type Workout } from './types';
 
 let n = 0;
@@ -220,5 +222,41 @@ describe('drempeltempo uit blokken', () => {
   it('negeert blokken op lage hartslag: die zeggen niets over je drempel', () => {
     const thr = runThreshold(withMax([block(165)]), 'tom', '2026-10-07');
     expect(thr?.basis.join(' ') ?? '').not.toContain('6×800 m');
+  });
+});
+
+describe('fitheidstrend', () => {
+  /** Runs met hartslag: elke week een run van 10 km op dezelfde hartslag, steeds iets sneller. */
+  const weekly = (start: number, step: number) =>
+    Array.from({ length: 7 }, (_, i) =>
+      wo({
+        type: 'lange_run',
+        date: iso(addDays(new Date(2026, 8, 8), 7 * i)),
+        kind: 'easy',
+        stats: { done: true, afstand: 10, tijdMin: 10 * (start - step * i), gemHr: 156 }
+      })
+    );
+  const withHr = (ws: Workout[]) => {
+    const s = state(ws);
+    s.settings = { tom: { maxHr: 204 } } as State['settings'];
+    s.garmin = { tom: { '2026-10-12': { rhr: 56 } } } as State['garmin'];
+    return s;
+  };
+
+  it('ziet sneller worden als een dalende racetijd', () => {
+    const s = withHr(weekly(5.9, 0.05));
+    const t = fitnessTrend(s, 'tom', '2026-10-20', readiness(s, 'tom', '2026-10-20'));
+    expect(t.run).toBeLessThan(0);
+  });
+
+  it('laat één losse korte run van zes weken geleden de projectie niet omgooien', () => {
+    // 5 september: 3,4 km in zone 2 — zonder drempelmeting zou dat een halve marathon van ±1:45 zijn
+    const early = wo({
+      type: 'korte_run', date: '2026-09-05', kind: 'easy',
+      stats: { done: true, afstand: 3.4, tijdMin: 3.4 * 5.12, gemHr: 158 }
+    });
+    const s = withHr([early, ...weekly(5.6, 0)]);
+    const v = raceView(s, 'tom', '2026-10-19');
+    expect(v.projected.legs.run.min!).toBeLessThanOrEqual(v.today.legs.run.min! + 0.01);
   });
 });

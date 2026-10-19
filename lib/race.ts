@@ -264,8 +264,45 @@ export function projectReadiness(r: Readiness, adh: number): Readiness {
 }
 
 /**
- * Projectie naar 18 april. Fitheid: per onderdeel de verandering van de
- * laatste zes weken, per week, begrensd op ±1% en gehalveerd (vooruitgang
+ * Fitheidstrend per onderdeel, als relatieve verandering van de racetijd per
+ * week (negatief = sneller): een trendlijn door de schattingen van elke week
+ * van de laatste zes, bij dezelfde raceklaarheid.
+ *
+ * Alleen schattingen die op een echte meting rusten tellen; een schatting
+ * met lage betrouwbaarheid (één losse run, of zonder drempelmeting uit het
+ * zone-2-tempo) niet. Minstens drie punten over minstens drie weken, anders
+ * geen trend. Eerder werd alleen nu met precies zes weken geleden vergeleken:
+ * dan kon één korte run van toen (3,4 km, als zone-2-run → halve marathon in
+ * 1:45) de projectie ineens 10 minuten slechter maken.
+ */
+export function fitnessTrend(
+  state: State,
+  person: Person,
+  asOf: string,
+  ready: Readiness
+): Record<LegKey, number> {
+  const out = { zwem: 0, fiets: 0, run: 0 } as Record<LegKey, number>;
+  const points = Array.from({ length: 7 }, (_, i) => {
+    const weeksAgo = 6 - i;
+    return { x: -weeksAgo, e: estimateAt(state, person, iso(addDays(fromIso(asOf), -7 * weeksAgo)), ready) };
+  });
+  for (const k of ['zwem', 'fiets', 'run'] as LegKey[]) {
+    const xs = points
+      .filter((p) => p.e.legs[k].min != null && p.e.legs[k].confidence && p.e.legs[k].confidence !== 'laag')
+      .map((p) => ({ x: p.x, y: p.e.legs[k].min! }));
+    if (xs.length < 3 || xs[xs.length - 1].x - xs[0].x < 3) continue;
+    const mx = xs.reduce((s, p) => s + p.x, 0) / xs.length;
+    const my = xs.reduce((s, p) => s + p.y, 0) / xs.length;
+    const slope =
+      xs.reduce((s, p) => s + (p.x - mx) * (p.y - my), 0) / xs.reduce((s, p) => s + (p.x - mx) ** 2, 0);
+    out[k] = slope / my;
+  }
+  return out;
+}
+
+/**
+ * Projectie naar 18 april. Fitheid: per onderdeel de trend van de laatste zes
+ * weken (fitnessTrend), begrensd op ±1% per week en gehalveerd (vooruitgang
  * vlakt af). Raceklaar: zie projectReadiness. Elke week verder weg maakt de
  * marge 0,4% breder.
  */
@@ -274,21 +311,14 @@ export function raceView(state: State, person: Person, asOf = iso(new Date())): 
   const today = estimateAt(state, person, asOf, ready);
   const weeksLeft = Math.max(0, (+RACE - +fromIso(asOf)) / (7 * 86400000));
 
-  // fitheidstrend apart van raceklaarheid: beide momenten met dezelfde raceklaar
-  const before = estimateAt(state, person, iso(addDays(fromIso(asOf), -42)), ready);
   const adh = adherence(state, person, asOf);
   const raceReady = projectReadiness(ready, adh);
   const atRace = estimateAt(state, person, asOf, raceReady);
+  const trend = fitnessTrend(state, person, asOf, ready);
 
   const legs = {} as Record<LegKey, Leg>;
   for (const k of ['zwem', 'fiets', 'run'] as LegKey[]) {
-    const now = today.legs[k];
-    const then = before.legs[k];
-    let rate = 0;
-    if (now.min != null && then.min != null && then.min > 0) {
-      rate = (now.min - then.min) / then.min / 6;
-      rate = Math.max(-MAX_WEEKLY, Math.min(MAX_WEEKLY, rate));
-    }
+    const rate = Math.max(-MAX_WEEKLY, Math.min(MAX_WEEKLY, trend[k]));
     const factor = 1 + rate * 0.5 * weeksLeft;
     const leg = atRace.legs[k];
     legs[k] = {
